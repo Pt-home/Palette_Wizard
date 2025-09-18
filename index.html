@@ -80,13 +80,13 @@
   <footer>Transparent pixels are ignored in analysis.</footer>
 
 <script>
-/* ---------- Bridge ---------- */
+/* ===== Bridge ===== */
 let ppReady=false, waiter=null;
 window.addEventListener("message", e => { if(e.data==="done"){ ppReady=true; if(waiter){waiter(); waiter=null;} }});
 try{ window.parent.postMessage("app.echoToOE('ping')","*"); }catch(e){}
 function waitPP(){ return new Promise(r=>{ if(ppReady) r(); else waiter=r; }); }
 
-/* ---------- UI ---------- */
+/* ===== UI ===== */
 document.getElementById("gen").addEventListener("click", async () => {
   try{ console.clear(); }catch(e){}
   await waitPP();
@@ -104,25 +104,40 @@ document.querySelectorAll('button[data-export]').forEach(btn=>{
 });
 function setExport(v){ document.querySelectorAll('button[data-export]').forEach(b=>b.disabled=!v); }
 function clearPalettes(){
-  for (const key of ["freq","bright","chroma","hue"]) {
-    const sw = document.querySelector(`.swatches[data-swatches="${key}"]`); if (sw) sw.innerHTML="";
-    const hx = document.querySelector(`.hex[data-hex="${key}"]`); if (hx) hx.textContent="";
+  for(const key of ["freq","bright","chroma","hue"]){
+    const sw=document.querySelector(`.swatches[data-swatches="${key}"]`); if(sw) sw.innerHTML="";
+    const hx=document.querySelector(`.hex[data-hex="${key}"]`); if(hx) hx.textContent="";
   }
 }
 
-/* ---------- Ask Photopea for PNG with strict visibility rules ---------- */
+/* ===== Core: request PNG with strict layer logic and two-phase restore ===== */
 async function requestPng(mode){
-  const got = new Promise(resolve=>{
-    const onMsg = async (e)=>{
-      if(!(e.data instanceof ArrayBuffer)) return;
-      window.removeEventListener("message", onMsg);
+  // we expect two messages: ArrayBuffer (PNG) and "__VIS__[...]"
+  let prevVis=null, gotPNG=null;
+  const finishIfReady = ()=> {
+    if (gotPNG && prevVis) {
+      // send restore script now
+      const restore = [
+        '(function(){',
+        ' var d=app.activeDocument; if(!d) return;',
+        ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+        ' var all=[]; walk(d.layers, all);',
+        ' var prev='+prevVis+';',
+        ' for (var i=0;i<all.length && i<prev.length;i++){ all[i].visible = !!prev[i]; }',
+        '})();'
+      ].join('\n');
+      try{ window.parent.postMessage(restore,"*"); }catch(e){}
+    }
+  };
 
+  const handler = async (e)=>{
+    if (e.data instanceof ArrayBuffer) {
+      // got PNG
       const blob = new Blob([e.data], {type:"image/png"});
-      const img  = await blobToImage(blob);
-
+      const img = await blobToImage(blob);
       drawPreview(img, mode);
       const {data,width,height} = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(data, 1); // α≥1 only
+      const pixels = rgbaToRgbArray(data, 1);
 
       const diag = diagnose(pixels);
       document.getElementById("pvDiag").innerHTML =
@@ -130,49 +145,71 @@ async function requestPng(mode){
          <div>Avg luminance: <b>${diag.avgY.toFixed(1)}</b></div>
          <div>Black ratio (&le;10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
 
-      if (diag.count<10) { resolve(false); return; } // порожньо
-      runAllPalettes(data,width,height);
-      setExport(true);
-      resolve(true);
-    };
-    window.addEventListener("message", onMsg, {once:true});
+      if (diag.count>=10){
+        runAllPalettes(data,width,height);
+        setExport(true);
+        gotPNG = true;
+        finishIfReady();
+      } else {
+        gotPNG = true;
+        finishIfReady();
+      }
+    } else if (typeof e.data === "string" && e.data.startsWith("__VIS__")) {
+      prevVis = e.data.substring(7); // JSON text
+      finishIfReady();
+    }
+  };
+  window.addEventListener("message", handler);
+  // build Photopea script
+  const script = (mode==="layer")
+    ? [
+        '(function(){',
+        ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+        ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+        ' var all=[]; walk(d.layers, all);',
+        ' var prev=new Array(all.length);',
+        ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=false; }', // OFF all
+        ' var cl=d.currentLayer;',
+        ' if(cl){',
+        '   cl.visible=true;',
+        '   try{ var p=cl.parent; while(p){ p.visible=true; p=p.parent; } }catch(e){}',
+        ' }',
+        ' d.saveToOE("png");',
+        ' app.echoToOE("__VIS__"+JSON.stringify(prev));', // send previous visibility for later restore
+        '})();'
+      ].join('\n')
+    : [
+        '(function(){',
+        ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+        ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+        ' var all=[]; walk(d.layers, all);',
+        ' var prev=new Array(all.length);',
+        ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=true; }', // FORCE all ON
+        ' d.saveToOE("png");',
+        ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
+        '})();'
+      ].join('\n');
 
-    // Build PP script with delayed restore to beat async saveToOE
-    const script = (mode==="layer")
-      ? [
-          '(function(){',
-          ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-          ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-          ' var all=[]; walk(d.layers, all);',
-          ' var prev=new Array(all.length);',
-          ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=false; }', // OFF all
-          ' var cl=d.currentLayer;',
-          ' if(cl){',
-          '   cl.visible=true;',                            // ON only current
-          '   try{ var p=cl.parent; while(p){ p.visible=true; p=p.parent; } }catch(e){}', // parents ON so the layer is not hidden by group
-          ' }',
-          ' d.saveToOE("png");',
-          ' setTimeout(function(){ for (var j=0;j<all.length;j++) all[j].visible=prev[j]; }, 0);', // restore AFTER save
-          '})();'
-        ].join('\n')
-      : [
-          '(function(){',
-          ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-          ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-          ' var all=[]; walk(d.layers, all);',
-          ' var prev=new Array(all.length);',
-          ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=true; }', // FORCE all ON
-          ' d.saveToOE("png");',
-          ' setTimeout(function(){ for (var j=0;j<all.length;j++) all[j].visible=prev[j]; }, 0);', // restore AFTER save
-          '})();'
-        ].join('\n');
+  try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
 
-    try{ window.parent.postMessage(script, "*"); }catch(e){ resolve(false); }
+  // wait until we receive both messages or timeout safeguard
+  const ok = await new Promise(resolve=>{
+    const t = setTimeout(()=>{
+      window.removeEventListener("message", handler);
+      resolve(false);
+    }, 4000);
+    const check = setInterval(()=>{
+      if (gotPNG && prevVis){
+        clearTimeout(t); clearInterval(check);
+        window.removeEventListener("message", handler);
+        resolve(true);
+      }
+    }, 50);
   });
-  return got;
+  return ok;
 }
 
-/* ---------- Preview & diagnostics ---------- */
+/* ===== Preview & diagnostics ===== */
 function drawPreview(img, mode){
   document.getElementById("pvMeta").textContent =
     `Source: ${mode==="layer"?"Current layer":"Full document"} • ${img.width}×${img.height}px`;
@@ -188,38 +225,34 @@ function drawPreview(img, mode){
 function diagnose(pix){
   let n=0,sumY=0,blacks=0;
   for(const p of pix){ const y=0.2126*p[0]+0.7152*p[1]+0.0722*p[2]; if(y<=10) blacks++; sumY+=y; n++; }
-  return {count:n, avgY: n?sumY/n:0, blackRate:n?blacks/n:1};
+  return {count:n, avgY:n?sumY/n:0, blackRate:n?blacks/n:1};
 }
 
-/* ---------- Palette engine ---------- */
+/* ===== Palettes ===== */
 const lastPalettes={freq:[],bright:[],chroma:[],hue:[]};
 function runAllPalettes(data,w,h){
   const k=Math.max(2, Math.min(16, parseInt(document.getElementById("k").value||"6",10)));
-  const pixels = rgbaToRgbArray(data,1);
-
-  const freq   = kmeans(pixels,k); lastPalettes.freq=freq; render('freq',freq);
-  const bright = byBrightness(pixels,k); lastPalettes.bright=bright; render('bright',bright);
-  const chroma = byChroma(pixels,k);     lastPalettes.chroma=chroma; render('chroma',chroma);
-  const hue    = byHue(pixels,k);        lastPalettes.hue=hue; render('hue',hue);
+  const pixels=rgbaToRgbArray(data,1);
+  const freq=kmeans(pixels,k);      lastPalettes.freq=freq;    render('freq',freq);
+  const bright=byBrightness(pixels,k); lastPalettes.bright=bright; render('bright',bright);
+  const chroma=byChroma(pixels,k);  lastPalettes.chroma=chroma; render('chroma',chroma);
+  const hue=byHue(pixels,k);        lastPalettes.hue=hue;      render('hue',hue);
 }
-
-/* ---------- Render ---------- */
 function render(key, colors){
   const root=document.querySelector(`.swatches[data-swatches="${key}"]`);
   root.innerHTML = colors.map(c=>`<div class="sw" title="${hex(c)}" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div>`).join('');
-  const hx=document.querySelector(`.hex[data-hex="${key}"]`);
-  if(hx) hx.textContent = colors.map(hex).join('  ');
+  const hx=document.querySelector(`.hex[data-hex="${key}"]`); if(hx) hx.textContent = colors.map(hex).join('  ');
 }
 
-/* ---------- Color / math ---------- */
+/* ===== Color / math ===== */
 function hex([r,g,b]){ const h=n=>Math.max(0,Math.min(255,n|0)).toString(16).padStart(2,'0').toUpperCase(); return `#${h(r)}${h(g)}${h(b)}`; }
 function rgbaToRgbArray(rgba, alphaMin=1){ const out=[]; for(let i=0;i<rgba.length;i+=4){ if(rgba[i+3] < alphaMin) continue; out.push([rgba[i],rgba[i+1],rgba[i+2]]);} return out; }
 function rgbToHsl([r,g,b]){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-min; s=l>0.5? d/(2-max-min): d/(max+min); switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;} h/=6;} return [h*360,s,l]; }
 function dist2(a,b){ const dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; return dx*dx+dy*dy+dz*dz; }
 function avg(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n),Math.round(g/n),Math.round(b/n)]; }
-function sample(arr,n){ if(arr.length<=n) return arr; const out=[], step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
+function sample(arr,n){ if(arr.length<=n) return arr; const out=[],step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
 
-/* Palettes */
+/* K-means & friends */
 function kmeans(pixels,k){
   const S=sample(pixels, Math.min(40000,pixels.length)); if(!S.length) return Array.from({length:k},()=>[0,0,0]);
   const centers=[], used=new Set(); while(centers.length<Math.min(k,S.length)){ const i=Math.floor(Math.random()*S.length); if(!used.has(i)){ used.add(i); centers.push(S[i].slice()); } }
@@ -235,28 +268,13 @@ function kmeans(pixels,k){
   return centers.map((c,i)=>({c,w:counts[i]})).sort((a,b)=>b.w-a.w).map(x=>x.c).slice(0,k);
 }
 function byBrightness(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p,y:0.2126*p[0]+0.7152*p[1]+0.0722*p[2]})).sort((a,b)=>a.y-b.y); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; }
-function byChroma(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p,s:rgbToHsl(p)[1]})).sort((a,b)=>b.s-a.s); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; }
-function byHue(pixels,k){ const bins=72, buckets=Array.from({length:bins},()=>[]); for(const p of pixels){ const [h]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); } const top=buckets.map((a,i)=>({i,n:a.length,a})).sort((A,B)=>B.n-A.n).slice(0,k).sort((A,B)=>A.i-B.i); return top.map(b=>avg(b.a.length?b.a:[[0,0,0]])); }
+function byChroma(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p:sat(p)})).sort((a,b)=>b.p-a.p); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; function sat(p){return rgbToHsl(p)[1];} }
+function byHue(pixels,k){ const bins=72,buckets=Array.from({length:bins},()=>[]); for(const p of pixels){ const [h]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); } const top=buckets.map((a,i)=>({i,n:a.length,a})).sort((A,B)=>B.n-A.n).slice(0,k).sort((A,B)=>A.i-B.i); return top.map(b=>avg(b.a.length?b.a:[[0,0,0]])); }
 
-/* ---------- Canvas helpers ---------- */
+/* ===== Canvas / export ===== */
 function blobToImage(blob){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
-function imageToImageData(img, maxLong=768){
-  const long=Math.max(img.width,img.height), s=long>maxLong? maxLong/long:1;
-  const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s));
-  const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-  const cx=cv.getContext("2d",{willReadFrequently:true}); cx.drawImage(img,0,0,w,h);
-  const id=cx.getImageData(0,0,w,h); return {data:id.data,width:w,height:h};
-}
-
-/* ---------- Export palette ---------- */
-async function exportPalette(colors, filename){
-  const sw=100,H=100,W=Math.max(1,colors.length*sw);
-  const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const cx=cv.getContext("2d");
-  let x=0; for(const c of colors){ cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; cx.fillRect(x,0,sw,H); x+=sw; }
-  const blob=await new Promise(res=>cv.toBlob(res,"image/png")); const ab=await blob.arrayBuffer();
-  try{ window.parent.postMessage(ab,"*"); }catch(e){}
-  setTimeout(()=>{ try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){} },300);
-}
+function imageToImageData(img, maxLong=768){ const long=Math.max(img.width,img.height), s=long>maxLong? maxLong/long:1; const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s)); const cv=document.createElement("canvas"); cv.width=w; cv.height=h; const cx=cv.getContext("2d",{willReadFrequently:true}); cx.drawImage(img,0,0,w,h); const id=cx.getImageData(0,0,w,h); return {data:id.data,width:w,height:h}; }
+async function exportPalette(colors, filename){ const sw=100,H=100,W=Math.max(1,colors.length*sw); const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const cx=cv.getContext("2d"); let x=0; for(const c of colors){ cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; cx.fillRect(x,0,sw,H); x+=sw; } const blob=await new Promise(res=>cv.toBlob(res,"image/png")); const ab=await blob.arrayBuffer(); try{ window.parent.postMessage(ab,"*"); }catch(e){} setTimeout(()=>{ try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){} },300); }
 </script>
 </body>
 </html>
