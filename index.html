@@ -5,35 +5,31 @@
   <title>Palette Wizard for Photopea</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root { --gap: 10px; --sw: 36px; font-synthesis-weight:none; }
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#111; background:#fff; }
-    @media (prefers-color-scheme: dark) {
-      body { background:#0f1115; color:#e8e8e8; }
-      header, footer { background:#0f1115; }
-      .palette { border-color:#2a2e35; }
-      .sw { border-color:#1e2228; box-shadow:none; }
-      button { border-color:#3a3f47; background:#151922; color:#e8e8e8; }
-      input[type="number"], select { background:#151922; color:#e8e8e8; border:1px solid #3a3f47; }
-    }
-    header { padding: 14px 16px; border-bottom: 1px solid #e5e5e5; background: #fafafa; position:sticky; top:0; z-index:10; }
-    h1 { font-size: 16px; margin: 0 0 6px; }
+    :root { --gap:10px; --sw:36px; }
+    * { box-sizing:border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#e8e8e8; background:#0f1115; }
+    header { padding:14px 16px; border-bottom:1px solid #2a2e35; position:sticky; top:0; z-index:10; background:#0f1115; }
+    h1 { font-size:16px; margin:0 0 6px; }
     .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    label { font-size: 13px; }
-    input[type="number"], select { padding:6px 8px; font-size:13px; border-radius:8px; border:1px solid #ccc; }
-    input[type="number"] { width: 90px; }
-    button { padding:8px 12px; border:1px solid #ccc; background:#fff; border-radius:8px; cursor:pointer; font-size:13px; }
+    label { font-size:13px; }
+    input[type="number"], select { padding:6px 8px; font-size:13px; border-radius:8px; border:1px solid #3a3f47; background:#151922; color:#e8e8e8; }
+    input[type="number"]{ width:90px; }
+    button { padding:8px 12px; border:1px solid #3a3f47; background:#151922; color:#e8e8e8; border-radius:8px; cursor:pointer; font-size:13px; }
     button:disabled { opacity:.6; cursor:not-allowed; }
     main { padding:14px 16px; display:grid; gap:16px; }
-    section.palette { border:1px solid #eee; border-radius:10px; padding:12px; }
+    .preview { border:1px solid #2a2e35; border-radius:10px; padding:12px; display:grid; gap:8px; }
+    .pv-head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .pv-info { font-size:12px; color:#9aa1ab; }
+    .pv-wrap { display:flex; gap:12px; align-items:center; }
+    .pv-wrap canvas { width:160px; height:auto; border-radius:6px; border:1px solid #2a2e35; background:#0a0c10; }
+    section.palette { border:1px solid #2a2e35; border-radius:10px; padding:12px; }
     .titlebar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
     .titlebar h2 { font-size:14px; margin:0; }
-    .swatches { display:flex; gap: var(--gap); flex-wrap: wrap; }
-    .sw { width: var(--sw); height: var(--sw); border-radius:8px; border:1px solid #ddd; box-shadow: 0 0 0 1px rgba(0,0,0,.04) inset; }
-    .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; font-size: 11px; color:#666; }
+    .swatches { display:flex; gap:var(--gap); flex-wrap:wrap; }
+    .sw { width:var(--sw); height:var(--sw); border-radius:8px; border:1px solid #1e2228; }
+    .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; font-size:11px; color:#9aa1ab; }
     .row2 { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
-    .hint { font-size:12px; color:#666; }
-    footer { padding:10px 16px; border-top:1px solid #eee; font-size:12px; color:#666; }
+    footer { padding:10px 16px; border-top:1px solid #2a2e35; font-size:12px; color:#9aa1ab; }
   </style>
 </head>
 <body>
@@ -48,9 +44,20 @@
         <option value="layer">Current layer</option>
       </select>
       <button id="gen">Generate</button>
-      <span id="ppState" class="hint">Photopea: <b>waiting…</b></span>
     </div>
   </header>
+
+  <!-- Mini preview of what we actually analyze -->
+  <section class="preview">
+    <div class="pv-head">
+      <strong>Analysis Preview</strong>
+      <span class="pv-info" id="pvMeta">No data yet.</span>
+    </div>
+    <div class="pv-wrap">
+      <canvas id="pvCanvas" width="1" height="1"></canvas>
+      <div class="pv-info" id="pvDiag"></div>
+    </div>
+  </section>
 
   <main>
     <section class="palette" id="pal-freq">
@@ -59,9 +66,7 @@
         <button data-export="freq" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="freq"></div>
-      <div class="row2">
-        <span class="hint">Top clusters in RGB space by pixel frequency (k-means).</span>
-      </div>
+      <div class="row2"><span class="hex"></span></div>
     </section>
 
     <section class="palette" id="pal-bright">
@@ -70,9 +75,7 @@
         <button data-export="bright" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="bright"></div>
-      <div class="row2">
-        <span class="hint">Quantile bins across luminance (dark → light).</span>
-      </div>
+      <div class="row2"><span class="hex"></span></div>
     </section>
 
     <section class="palette" id="pal-chroma">
@@ -81,9 +84,7 @@
         <button data-export="chroma" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="chroma"></div>
-      <div class="row2">
-        <span class="hint">Groups by saturation (most vivid first).</span>
-      </div>
+      <div class="row2"><span class="hex"></span></div>
     </section>
 
     <section class="palette" id="pal-hue">
@@ -92,337 +93,268 @@
         <button data-export="hue" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="hue"></div>
-      <div class="row2">
-        <span class="hint">Top hue buckets around the color wheel.</span>
-      </div>
+      <div class="row2"><span class="hex"></span></div>
     </section>
   </main>
 
   <footer>
-    Tip: If a layer is an adjustment / empty or fully transparent, the plugin falls back to the full document automatically.
+    If the layer is adjustment/empty, the plugin falls back to the full document automatically.
   </footer>
 
 <script>
-/* ======================== Photopea bridge ======================== */
+/* ======================== Bridge ======================== */
 let ppReady = false;
-let pendingResolve = null;
+let waiter = null;
 
-window.addEventListener("message", async (e) => {
-  if (e.data === "done") {
-    ppReady = true;
-    document.getElementById("ppState").innerHTML = 'Photopea: <b>ready</b>';
-    if (pendingResolve) { pendingResolve(); pendingResolve = null; }
-  } else if (typeof e.data === "string") {
-    // console.log("PP:", e.data);
-  }
+// one-time ping to get "done" from Photopea (no “ready” label in UI)
+window.addEventListener("message", (e) => {
+  if (e.data === "done") { ppReady = true; if (waiter) { waiter(); waiter=null; } }
 });
+try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch (e) {}
 
-// ping once to get "done"
-(function ping() {
-  try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch(e){}
-})();
+function waitPP() { return new Promise(r => { if (ppReady) r(); else waiter = r; }); }
 
-function waitForPP(){ return new Promise(r=>{ pendingResolve=r; }); }
-
-/* ========================= UI handlers ========================== */
+/* ======================== UI ============================ */
 const genBtn = document.getElementById("gen");
 genBtn.addEventListener("click", async () => {
-  if (!ppReady) await waitForPP();
-
-  setExportButtonsEnabled(false);
+  await waitPP();
+  setExportButtons(false);
   clearAllPalettes();
 
-  const mode = (document.getElementById("src")?.value) || "doc";
-
-  // 1) try user-selected mode
-  const ok1 = await requestPngFromPhotopea(mode);
-  // 2) if empty/too few pixels → fallback to document
-  if (!ok1 && mode === "layer") {
-    await requestPngFromPhotopea("doc");
-  }
+  const mode = document.getElementById("src").value || "doc";
+  const ok = await requestPng(mode);
+  if (!ok && mode === "layer") { await requestPng("doc"); }
 });
 
 for (const btn of document.querySelectorAll('button[data-export]')) {
   btn.addEventListener("click", () => {
     const key = btn.getAttribute("data-export");
-    const colors = lastPalettes[key] || [];
-    exportPalettePngToPhotopea(colors, `Palette-${key.toUpperCase()}.png`);
+    exportPalettePngToPhotopea(lastPalettes[key] || [], `Palette-${key.toUpperCase()}.png`);
   });
-}
+});
 
-function setExportButtonsEnabled(v){
-  for (const b of document.querySelectorAll('button[data-export]')) b.disabled = !v;
-}
+function setExportButtons(v){ for (const b of document.querySelectorAll('button[data-export]')) b.disabled = !v; }
 function clearAllPalettes(){
-  for (const key of ["freq","bright","chroma","hue"]){
-    const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
-    if (root) root.innerHTML = "";
-    const r2 = root?.parentElement?.querySelector(".row2 .hex");
-    if (r2) r2.remove();
+  for (const key of ["freq","bright","chroma","hue"]) {
+    const root = qs(`.swatches[data-swatches="${key}"]`);
+    root.innerHTML = "";
+    const hex = root.parentElement.querySelector(".row2 .hex");
+    if (hex) hex.textContent = "";
   }
 }
 
-/** Ask Photopea for PNG (mode: "layer" | "doc"). Returns true if analysis ran and pixels were sufficient. */
-async function requestPngFromPhotopea(mode) {
-  return new Promise((resolve) => {
+/* ==================== Request PNG ======================= */
+async function requestPng(mode){
+  // one-shot listener for this request
+  const got = new Promise((resolve) => {
     const onMsg = async (e) => {
-      if (e.data instanceof ArrayBuffer) {
-        window.removeEventListener("message", onMsg);
-        const blob = new Blob([e.data], { type: "image/png" });
-        const img = await blobToImage(blob);
-        const { data } = imageToImageData(img, 512);
-        const pixels = rgbaToRgbArray(data);
-        if (pixels.length < 500) { resolve(false); return; } // empty/transparent/adjustment layer
-        runAllPalettes(data, img.width, img.height);
-        setExportButtonsEnabled(true);
-        resolve(true);
-      }
-    };
-    window.addEventListener("message", onMsg, { once:false });
+      if (!(e.data instanceof ArrayBuffer)) return;
+      window.removeEventListener("message", onMsg);
 
-    let script = "";
-    if (mode === "layer") {
-      script = `
-        (function(){
-          var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
-          var L = d.layers, vis=[];
-          for (var i=0;i<L.length;i++){ vis[i]=L[i].visible; L[i].visible=false; }
-          var cl = d.currentLayer; if(cl) cl.visible = true;
-          d.saveToOE("png");
-          for (var j=0;j<L.length;j++) L[j].visible = vis[j];
-        })();
-      `;
-    } else {
-      script = `
-        (function(){
-          var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
-          d.saveToOE("png");
-        })();
-      `;
-    }
-    window.parent.postMessage(script, "*");
+      // decode -> preview canvas -> analyze
+      const blob = new Blob([e.data], { type: "image/png" });
+      const img = await blobToImage(blob);
+
+      // draw into preview
+      drawPreview(img, mode);
+
+      // analyze (downsample to 768 on the long side)
+      const { data, width, height } = imageToImageData(img, 768);
+      const pixels = rgbaToRgbArray(data, 1); // keep almost all pixels (alpha >= 1)
+
+      const diag = diagnosePixels(pixels);
+      document.getElementById("pvDiag").innerHTML =
+        `<div>Non-transparent pixels: <b>${diag.count}</b></div>
+         <div>Avg luminance (0..255): <b>${diag.avgY.toFixed(1)}</b></div>
+         <div>Black ratio (&lt;=10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
+
+      // if too few / too black → treat as failure
+      if (diag.count < 500 || diag.blackRate > 0.98) { resolve(false); return; }
+
+      runAllPalettes(data, width, height);
+      setExportButtons(true);
+      resolve(true);
+    };
+    window.addEventListener("message", onMsg, { once:true });
   });
+
+  // minimal PP script
+  const script = (mode === "layer")
+    ? `
+      (function(){
+        var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+        var L=d.layers, vis=[];
+        for (var i=0;i<L.length;i++){ vis[i]=L[i].visible; L[i].visible=false; }
+        if (d.currentLayer) d.currentLayer.visible = true;
+        d.saveToOE("png");
+        for (var j=0;j<L.length;j++) L[j].visible = vis[j];
+      })();`
+    : `
+      (function(){
+        var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+        d.saveToOE("png");
+      })();`;
+
+  window.parent.postMessage(script, "*");
+  return await got;
 }
 
-/* ======================= Palette engine ========================= */
+/* ================ Preview + Diagnostics ================= */
+function drawPreview(img, mode){
+  const meta = document.getElementById("pvMeta");
+  meta.textContent = `Source: ${mode === "layer" ? "Current layer" : "Full document"} • ${img.width}×${img.height}px`;
+  const cv = document.getElementById("pvCanvas");
+  const maxW = 300;
+  const scale = img.width > maxW ? maxW/img.width : 1;
+  cv.width = Math.max(1, Math.round(img.width * scale));
+  cv.height = Math.max(1, Math.round(img.height * scale));
+  const cx = cv.getContext("2d", { willReadFrequently:true });
+  cx.fillStyle = "#0a0c10";
+  cx.fillRect(0,0,cv.width,cv.height);
+  cx.imageSmoothingEnabled = true;
+  cx.drawImage(img, 0, 0, cv.width, cv.height);
+}
+
+function diagnosePixels(pix){
+  let n=0, sumY=0, blacks=0;
+  for (const p of pix){
+    const y = 0.2126*p[0]+0.7152*p[1]+0.0722*p[2];
+    if (y <= 10) blacks++;
+    sumY += y; n++;
+  }
+  return { count:n, avgY: n? (sumY/n):0, blackRate: n? (blacks/n):1 };
+}
+
+/* =================== Palettes engine ==================== */
 const lastPalettes = { freq:[], bright:[], chroma:[], hue:[] };
 
-function runAllPalettes(data, w, h) {
-  const k = clamp(parseInt(document.getElementById("k").value || "6", 10), 2, 16);
-  const pixels = rgbaToRgbArray(data);
+function runAllPalettes(data, w, h){
+  const k = clamp(parseInt(document.getElementById("k").value||"6",10), 2, 16);
+  const pixels = rgbaToRgbArray(data, 1);
 
-  // 1) Frequency – k-means on a sample
-  const freq = kmeansPalette(pixels, k);
-  lastPalettes.freq = freq; renderPalette('freq', freq);
-
-  // 2) Brightness – luminance quantiles
-  const bright = brightnessPalette(pixels, k);
-  lastPalettes.bright = bright; renderPalette('bright', bright);
-
-  // 3) Chroma – saturation (HSL.S) buckets
-  const chroma = chromaPalette(pixels, k);
-  lastPalettes.chroma = chroma; renderPalette('chroma', chroma);
-
-  // 4) Hue – histogram buckets
-  const hue = huePalette(pixels, k);
-  lastPalettes.hue = hue; renderPalette('hue', hue);
+  const freq = kmeansPalette(pixels, k);   lastPalettes.freq=freq;   renderPalette('freq', freq);
+  const bright = brightnessPalette(pixels, k); lastPalettes.bright=bright; renderPalette('bright', bright);
+  const chroma = chromaPalette(pixels, k); lastPalettes.chroma=chroma; renderPalette('chroma', chroma);
+  const hue = huePalette(pixels, k);       lastPalettes.hue=hue;     renderPalette('hue', hue);
 }
 
-/* ======================= Rendering helpers ====================== */
-function renderPalette(key, colors) {
-  const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
+/* ================= Rendering helpers ==================== */
+function renderPalette(key, colors){
+  const root = qs(`.swatches[data-swatches="${key}"]`);
   root.innerHTML = "";
-  colors.forEach(rgb => {
+  for (const rgb of colors){
     const sw = document.createElement("div");
     sw.className = "sw";
     sw.style.background = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
     sw.title = rgbToHex(rgb);
     root.appendChild(sw);
-  });
-  // update HEX line (do not accumulate)
-  const row2 = root.parentElement.querySelector(".row2");
-  const old = row2.querySelector(".hex");
-  if (old) old.remove();
-  const hexLine = document.createElement("div");
-  hexLine.className = "hex";
-  hexLine.textContent = colors.map(rgbToHex).join("  ");
-  row2.appendChild(hexLine);
+  }
+  const hex = root.parentElement.querySelector(".row2 .hex");
+  hex.textContent = colors.map(rgbToHex).join("  ");
 }
 
-/* ========================== Color math ========================== */
-function rgbToHex([r,g,b]) {
-  const h = (n)=> n.toString(16).padStart(2,'0').toUpperCase();
-  return `#${h(r)}${h(g)}${h(b)}`;
-}
-function rgbaToRgbArray(rgba) {
-  const out = [];
-  for (let i=0; i<rgba.length; i+=4) {
+/* ===================== Color utils ====================== */
+function rgbToHex([r,g,b]){ const h=n=>n.toString(16).padStart(2,'0').toUpperCase(); return `#${h(r)}${h(b)}${h(g)}`.replace(/^#(..)(..)(..)$/, (_,rr,gg,bb)=>`#${rr}${gg}${bb}`); }
+function rgbaToRgbArray(rgba, alphaMin=1){
+  const out=[];
+  for (let i=0;i<rgba.length;i+=4){
     const a = rgba[i+3];
-    if (a < 10) continue; // ignore nearly transparent
+    if (a < alphaMin) continue; // be lenient: keep almost all
     out.push([rgba[i], rgba[i+1], rgba[i+2]]);
   }
   return out;
 }
-function rgbToHsl([r,g,b]) {
+function rgbToHsl([r,g,b]){
   r/=255; g/=255; b/=255;
   const max=Math.max(r,g,b), min=Math.min(r,g,b);
-  let h,s,l=(max+min)/2;
-  if(max===min){ h=0; s=0; }
-  else {
+  let h=0,s=0,l=(max+min)/2;
+  if (max!==min){
     const d=max-min;
     s = l>0.5 ? d/(2-max-min) : d/(max+min);
-    switch(max){
-      case r: h=(g-b)/d + (g<b?6:0); break;
-      case g: h=(b-r)/d + 2; break;
-      case b: h=(r-g)/d + 4; break;
-    } h/=6;
+    switch(max){ case r: h=(g-b)/d + (g<b?6:0); break;
+                 case g: h=(b-r)/d + 2; break;
+                 default: h=(r-g)/d + 4; }
+    h/=6;
   }
   return [h*360, s, l];
 }
 
-/* ========================== Palettes ============================ */
-function kmeansPalette(pixels, k) {
+/* ===================== Palettes ========================= */
+function kmeansPalette(pixels, k){
   const sample = sampleArray(pixels, Math.min(40000, pixels.length));
-  if (sample.length === 0) return Array.from({length:k}, ()=>[0,0,0]);
-
-  // init: random unique
-  const centers = [];
-  const used = new Set();
-  while (centers.length < Math.min(k, sample.length)) {
-    const idx = Math.floor(Math.random()*sample.length);
-    if (!used.has(idx)) { used.add(idx); centers.push(sample[idx].slice()); }
+  if (!sample.length) return Array.from({length:k}, ()=>[0,0,0]);
+  const centers=[], used=new Set();
+  while (centers.length < Math.min(k, sample.length)){
+    const i=Math.floor(Math.random()*sample.length);
+    if(!used.has(i)){ used.add(i); centers.push(sample[i].slice()); }
   }
-  const assign = new Array(sample.length).fill(0);
-
-  for (let it=0; it<10; it++) {
-    // assign
+  const assign=new Array(sample.length).fill(0);
+  for (let it=0; it<10; it++){
     for (let i=0;i<sample.length;i++){
-      let best=0, bestd=Infinity, p=sample[i];
+      let bi=0, bd=Infinity, p=sample[i];
       for (let c=0;c<centers.length;c++){
-        const d = dist2(p, centers[c]);
-        if (d<bestd){bestd=d;best=c;}
+        const d=dist2(p, centers[c]); if(d<bd){bd=d;bi=c;}
       }
-      assign[i]=best;
+      assign[i]=bi;
     }
-    // recompute
-    const sum = Array.from({length: centers.length}, ()=>[0,0,0,0]);
-    for (let i=0;i<sample.length;i++){
-      const a=assign[i], p=sample[i];
-      sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]+=1;
-    }
-    for (let c=0;c<centers.length;c++){
-      if (sum[c][3]>0){
-        centers[c][0]=Math.round(sum[c][0]/sum[c][3]);
-        centers[c][1]=Math.round(sum[c][1]/sum[c][3]);
-        centers[c][2]=Math.round(sum[c][2]/sum[c][3]);
-      }
-    }
+    const sum=Array.from({length:centers.length},()=>[0,0,0,0]);
+    for (let i=0;i<sample.length;i++){ const a=assign[i], p=sample[i]; sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]++; }
+    for (let c=0;c<centers.length;c++){ if(sum[c][3]){ centers[c][0]=Math.round(sum[c][0]/sum[c][3]); centers[c][1]=Math.round(sum[c][1]/sum[c][3]); centers[c][2]=Math.round(sum[c][2]/sum[c][3]); } }
   }
-  // rank by population
-  const counts = centers.map(()=>0);
-  for (const p of sample){
-    let best=0, bestd=Infinity;
-    for (let c=0;c<centers.length;c++){
-      const d=dist2(p, centers[c]); if(d<bestd){bestd=d;best=c;}
-    }
-    counts[best]++;
-  }
-  return centers
-    .map((c,i)=>({c,i,w:counts[i]}))
-    .sort((a,b)=>b.w-a.w)
-    .map(x=>x.c)
-    .slice(0,k);
+  const counts=centers.map(()=>0);
+  for (const p of sample){ let bi=0, bd=Infinity; for (let c=0;c<centers.length;c++){ const d=dist2(p, centers[c]); if(d<bd){bd=d;bi=c;} } counts[bi]++; }
+  return centers.map((c,i)=>({c,w:counts[i]})).sort((a,b)=>b.w-a.w).map(x=>x.c).slice(0,k);
 }
-function brightnessPalette(pixels, k) {
+function brightnessPalette(pixels, k){
   if (!pixels.length) return Array.from({length:k}, ()=>[0,0,0]);
-  const arr = pixels.map(p => ({p, y: 0.2126*p[0]+0.7152*p[1]+0.0722*p[2]}))
-                    .sort((a,b)=>a.y-b.y);
-  const out = [];
-  for (let i=0;i<k;i++){
-    const a = Math.floor(i*arr.length/k);
-    const b = Math.floor((i+1)*arr.length/k);
-    const slice = arr.slice(a,b);
-    out.push(avgColors(slice.map(x=>x.p)));
-  }
-  return out;
-}
-function chromaPalette(pixels, k) {
-  if (!pixels.length) return Array.from({length:k}, ()=>[0,0,0]);
-  const arr = pixels.map(p => {
-    const [h,s,l]=rgbToHsl(p);
-    return {p, s};
-  }).sort((a,b)=>b.s-a.s);
+  const arr=pixels.map(p=>({p,y:0.2126*p[0]+0.7152*p[1]+0.0722*p[2]})).sort((a,b)=>a.y-b.y);
   const out=[];
-  for (let i=0;i<k;i++){
-    const a = Math.floor(i*arr.length/k);
-    const b = Math.floor((i+1)*arr.length/k);
-    const slice = arr.slice(a,b);
-    out.push(avgColors(slice.map(x=>x.p)));
-  }
+  for (let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avgColors(arr.slice(a,b).map(x=>x.p))); }
   return out;
 }
-function huePalette(pixels, k) {
-  const bins = 72; // 5° bins
-  const buckets = Array.from({length:bins}, ()=>[]);
-  for (const p of pixels){
-    const [h,s,l]=rgbToHsl(p);
-    const bi = Math.floor(((h%360)+360)%360 / (360/bins));
-    buckets[bi].push(p);
-  }
-  const ranked = buckets.map((arr,i)=>({i,n:arr.length,arr}))
-                        .sort((a,b)=>b.n-a.n)
-                        .slice(0,k);
-  return ranked.sort((a,b)=>a.i-b.i).map(b=>avgColors(b.arr.length?b.arr:[[0,0,0]]));
+function chromaPalette(pixels, k){
+  if (!pixels.length) return Array.from({length:k}, ()=>[0,0,0]);
+  const arr=pixels.map(p=>({p,s:rgbToHsl(p)[1]})).sort((a,b)=>b.s-a.s);
+  const out=[];
+  for (let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avgColors(arr.slice(a,b).map(x=>x.p))); }
+  return out;
+}
+function huePalette(pixels, k){
+  const bins=72, buckets=Array.from({length:bins},()=>[]);
+  for (const p of pixels){ const [h,s,l]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); }
+  const ranked=buckets.map((arr,i)=>({i,n:arr.length,arr})).sort((a,b)=>b.n-a.n).slice(0,k).sort((a,b)=>a.i-b.i);
+  return ranked.map(b=>avgColors(b.arr.length?b.arr:[[0,0,0]]));
 }
 
-/* ========================== Utils =============================== */
+/* ======================= Utils ========================== */
 function dist2(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1], dz=a[2]-b[2]; return dx*dx+dy*dy+dz*dz; }
-function sampleArray(arr, n){
-  if (arr.length<=n) return arr;
-  const out=[]; const step = arr.length/n;
-  for (let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]);
-  return out;
-}
-function avgColors(list){
-  if (!list.length) return [0,0,0];
-  let r=0,g=0,b=0;
-  for (const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; }
-  const n = list.length;
-  return [Math.round(r/n), Math.round(g/n), Math.round(b/n)];
-}
+function sampleArray(arr,n){ if(arr.length<=n) return arr; const out=[]; const step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
+function avgColors(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n), Math.round(g/n), Math.round(b/n)]; }
 function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
-function blobToImage(blob){
-  return new Promise((res)=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); });
-}
-function imageToImageData(img, maxW=512){
-  const scale = img.width>maxW ? maxW/img.width : 1;
-  const w = Math.max(1, Math.round(img.width*scale));
-  const h = Math.max(1, Math.round(img.height*scale));
+function qs(s){ return document.querySelector(s); }
+function blobToImage(blob){ return new Promise(res => { const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
+function imageToImageData(img, maxLong=768){
+  const long=Math.max(img.width, img.height), scale = long>maxLong ? maxLong/long : 1;
+  const w=Math.max(1, Math.round(img.width*scale)), h=Math.max(1, Math.round(img.height*scale));
   const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
   const cx=cv.getContext("2d", { willReadFrequently:true });
   cx.drawImage(img,0,0,w,h);
   const id=cx.getImageData(0,0,w,h);
-  return { data: id.data, width:w, height:h };
+  return { data:id.data, width:w, height:h };
 }
 
-/* ========================== Export ============================== */
+/* ======================= Export ========================= */
 async function exportPalettePngToPhotopea(colors, filename="palette.png"){
-  const sw = 100, h = 100, gap = 0;
-  const w = colors.length*sw + Math.max(0, colors.length-1)*gap;
-  const cv = document.createElement("canvas"); cv.width = Math.max(1,w); cv.height = h;
-  const cx = cv.getContext("2d");
+  const sw=100, H=100, gap=0;
+  const W = Math.max(1, colors.length*sw + Math.max(0,colors.length-1)*gap);
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const cx=cv.getContext("2d");
   let x=0;
-  colors.forEach(rgb=>{
-    cx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    cx.fillRect(x,0,sw,h);
-    x += sw+gap;
-  });
-  const blob = await new Promise(res=>cv.toBlob(res, "image/png"));
+  for (const rgb of colors){ cx.fillStyle=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; cx.fillRect(x,0,sw,H); x+=sw+gap; }
+  const blob = await new Promise(res=>cv.toBlob(res,"image/png"));
   const ab = await blob.arrayBuffer();
   window.parent.postMessage(ab, "*");
-  setTimeout(()=>{
-    window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`, "*");
-  }, 300);
+  setTimeout(()=>{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`, "*"); }, 300);
 }
 </script>
 </body>
