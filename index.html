@@ -145,7 +145,6 @@ async function requestPng(mode){
 
   try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
 
-  // wait (PNG must arrive; for Full doc also restore payload)
   const ok = await new Promise(resolve=>{
     const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 4000);
     const chk = setInterval(()=>{
@@ -159,31 +158,27 @@ async function requestPng(mode){
 
 /* === Photopea scripts === */
 
-// CURRENT LAYER: duplicate active layer into a TEMP document → PNG → close → back
+// CURRENT LAYER: selectAll + copy (active layer only) → paste into TEMP doc → PNG → close
 function buildScriptCurrentLayerTempDoc(){
   return [
     '(function(){',
     ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
     ' var cl=d.currentLayer; if(!cl){ app.echoToOE("No current layer"); return; }',
     ' var w=d.width, h=d.height;',
-    ' var tmp = app.documents.add(w, h);',
+    ' var tmp = app.documents.add(w, h);',          // create empty temp doc
+    ' app.activeDocument = d; d.activeLayer = cl;', // ensure correct active layer',
     ' try {',
-    '   cl.duplicate(tmp);',                   // preferred path
-    ' } catch (e) {',
-    '   try {',                                // fallback copy/paste
-    '     app.activeDocument = d; d.activeLayer = cl;',
-    '     var desc = new ActionDescriptor();',
-    '     executeAction(stringIDToTypeID("copy"), desc);',
-    '     app.activeDocument = tmp;',
-    '     executeAction(stringIDToTypeID("paste"), new ActionDescriptor());',
-    '   } catch (e2) {}',
-    ' }',
+    '   // select all and COPY ONLY FROM ACTIVE LAYER (not merged)',
+    '   executeAction(stringIDToTypeID("selectAll"), new ActionDescriptor());',
+    '   executeAction(stringIDToTypeID("copy"), new ActionDescriptor());',
+    ' } catch(e) { app.echoToOE("Copy failed"); }',
     ' app.activeDocument = tmp;',
-    ' tmp.saveToOE("png");',                   // send PNG to plugin
-    ' tmp.close();',                           // close temp doc
-    ' app.activeDocument = d;',                // return to original
+    ' try { executeAction(stringIDToTypeID("paste"), new ActionDescriptor()); } catch(e) {}',
+    ' tmp.saveToOE("png");',
+    ' tmp.close();',
+    ' app.activeDocument = d;',
     '})();'
-  ].join('\n'); // IMPORTANT: real newlines
+  ].join('\n');
 }
 
 // FULL DOCUMENT: force ALL layers ON during export; send prev visibility for restore
@@ -254,7 +249,7 @@ function render(key, colors){
 /* ===== Color / math ===== */
 function hex([r,g,b]){ const h=n=>Math.max(0,Math.min(255,n|0)).toString(16).padStart(2,'0').toUpperCase(); return `#${h(r)}${h(g)}${h(b)}`; }
 function rgbaToRgbArray(rgba, alphaMin=1){ const out=[]; for(let i=0;i<rgba.length;i+=4){ if(rgba[i+3] < alphaMin) continue; out.push([rgba[i],rgba[i+1],rgba[i+2]]);} return out; }
-function rgbToHsl([r,g,b]){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-мin; s=l>0.5? d/(2-max-min): d/(max+min); switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;} h/=6;} return [h*360,s,l]; }
+function rgbToHsl([r,g,b]){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-min; s=l>0.5? d/(2-max-min): d/(max+min); switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;} h/=6;} return [h*360,s,l]; }
 function dist2(a,b){ const dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; return dx*dx+dy*dy+dz*dz; }
 function avg(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n),Math.round(g/n),Math.round(b/n)]; }
 function sample(arr,n){ if(arr.length<=n) return arr; const out=[],step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
