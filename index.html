@@ -6,30 +6,30 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root { --gap:10px; --sw:36px; }
-    * { box-sizing:border-box; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#e8e8e8; background:#0f1115; }
-    header { padding:14px 16px; border-bottom:1px solid #2a2e35; position:sticky; top:0; z-index:10; background:#0f1115; }
-    h1 { font-size:16px; margin:0 0 6px; }
-    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    label { font-size:13px; }
-    input[type="number"], select { padding:6px 8px; font-size:13px; border-radius:8px; border:1px solid #3a3f47; background:#151922; color:#e8e8e8; }
-    input[type="number"]{ width:90px; }
-    button { padding:8px 12px; border:1px solid #3a3f47; background:#151922; color:#e8e8e8; border-radius:8px; cursor:pointer; font-size:13px; }
-    button:disabled { opacity:.6; cursor:not-allowed; }
-    main { padding:14px 16px; display:grid; gap:16px; }
-    .preview { border:1px solid #2a2e35; border-radius:10px; padding:12px; display:grid; gap:8px; }
-    .pv-head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
-    .pv-info { font-size:12px; color:#9aa1ab; }
-    .pv-wrap { display:flex; gap:12px; align-items:center; }
-    .pv-wrap canvas { width:180px; height:auto; border-radius:6px; border:1px solid #2a2e35; background:#0a0c10; }
-    section.palette { border:1px solid #2a2e35; border-radius:10px; padding:12px; }
-    .titlebar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
-    .titlebar h2 { font-size:14px; margin:0; }
-    .swatches { display:flex; gap:var(--gap); flex-wrap:wrap; }
-    .sw { width:var(--sw); height:var(--sw); border-radius:8px; border:1px solid #1e2228; }
-    .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; font-size:11px; color:#9aa1ab; }
-    .row2 { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
-    footer { padding:10px 16px; border-top:1px solid #2a2e35; font-size:12px; color:#9aa1ab; }
+    *{ box-sizing:border-box; }
+    body{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin:0; color:#e8e8e8; background:#0f1115; }
+    header{ padding:14px 16px; border-bottom:1px solid #2a2e35; position:sticky; top:0; z-index:10; background:#0f1115; }
+    h1{ font-size:16px; margin:0 0 6px; }
+    .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    label{ font-size:13px; }
+    input[type=number],select{ padding:6px 8px; font-size:13px; border-radius:8px; border:1px solid #3a3f47; background:#151922; color:#e8e8e8; }
+    input[type=number]{ width:90px; }
+    button{ padding:8px 12px; border:1px solid #3a3f47; background:#151922; color:#e8e8e8; border-radius:8px; cursor:pointer; font-size:13px; }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    main{ padding:14px 16px; display:grid; gap:16px; }
+    .preview{ border:1px solid #2a2e35; border-radius:10px; padding:12px; display:grid; gap:8px; }
+    .pv-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .pv-info{ font-size:12px; color:#9aa1ab; }
+    .pv-wrap{ display:flex; gap:12px; align-items:center; }
+    .pv-wrap canvas{ width:180px; height:auto; border-radius:6px; border:1px solid #2a2e35; background:#0a0c10; }
+    section.palette{ border:1px solid #2a2e35; border-radius:10px; padding:12px; }
+    .titlebar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    .titlebar h2{ font-size:14px; margin:0; }
+    .swatches{ display:flex; gap:var(--gap); flex-wrap:wrap; }
+    .sw{ width:var(--sw); height:var(--sw); border-radius:8px; border:1px solid #1e2228; }
+    .hex{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#9aa1ab; }
+    .row2{ display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+    footer{ padding:10px 16px; border-top:1px solid #2a2e35; font-size:12px; color:#9aa1ab; }
   </style>
 </head>
 <body>
@@ -47,7 +47,6 @@
     </div>
   </header>
 
-  <!-- Preview of the exact raster being analyzed -->
   <section class="preview">
     <div class="pv-head">
       <strong>Analysis Preview</strong>
@@ -61,308 +60,202 @@
 
   <main>
     <section class="palette">
-      <div class="titlebar">
-        <h2>By Frequency</h2>
-        <button data-export="freq" disabled>Export to Photopea</button>
-      </div>
-      <div class="swatches" data-swatches="freq"></div>
-      <div class="row2"><span class="hex" data-hex="freq"></span></div>
+      <div class="titlebar"><h2>By Frequency</h2><button data-export="freq" disabled>Export to Photopea</button></div>
+      <div class="swatches" data-swatches="freq"></div><div class="row2"><span class="hex" data-hex="freq"></span></div>
     </section>
-
     <section class="palette">
-      <div class="titlebar">
-        <h2>By Brightness</h2>
-        <button data-export="bright" disabled>Export to Photopea</button>
-      </div>
-      <div class="swatches" data-swatches="bright"></div>
-      <div class="row2"><span class="hex" data-hex="bright"></span></div>
+      <div class="titlebar"><h2>By Brightness</h2><button data-export="bright" disabled>Export to Photopea</button></div>
+      <div class="swatches" data-swatches="bright"></div><div class="row2"><span class="hex" data-hex="bright"></span></div>
     </section>
-
     <section class="palette">
-      <div class="titlebar">
-        <h2>By Chroma</h2>
-        <button data-export="chroma" disabled>Export to Photopea</button>
-      </div>
-      <div class="swatches" data-swatches="chroma"></div>
-      <div class="row2"><span class="hex" data-hex="chroma"></span></div>
+      <div class="titlebar"><h2>By Chroma</h2><button data-export="chroma" disabled>Export to Photopea</button></div>
+      <div class="swatches" data-swatches="chroma"></div><div class="row2"><span class="hex" data-hex="chroma"></span></div>
     </section>
-
     <section class="palette">
-      <div class="titlebar">
-        <h2>By Hue</h2>
-        <button data-export="hue" disabled>Export to Photopea</button>
-      </div>
-      <div class="swatches" data-swatches="hue"></div>
-      <div class="row2"><span class="hex" data-hex="hue"></span></div>
+      <div class="titlebar"><h2>By Hue</h2><button data-export="hue" disabled>Export to Photopea</button></div>
+      <div class="swatches" data-swatches="hue"></div><div class="row2"><span class="hex" data-hex="hue"></span></div>
     </section>
   </main>
 
-  <footer>
-    Transparent pixels are ignored in analysis.
-  </footer>
+  <footer>Transparent pixels are ignored in analysis.</footer>
 
 <script>
-/* ======================== Bridge ======================== */
-let ppReady = false, waiter = null;
-window.addEventListener("message", function(e){
-  if (e.data === "done") { ppReady = true; if (waiter) { waiter(); waiter=null; } }
-});
-try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch(e) {}
-function waitPP(){ return new Promise(function(r){ if (ppReady) r(); else waiter = r; }); }
+/* ---------- Bridge ---------- */
+let ppReady=false, waiter=null;
+window.addEventListener("message", e => { if(e.data==="done"){ ppReady=true; if(waiter){waiter(); waiter=null;} }});
+try{ window.parent.postMessage("app.echoToOE('ping')","*"); }catch(e){}
+function waitPP(){ return new Promise(r=>{ if(ppReady) r(); else waiter=r; }); }
 
-/* ======================== UI ============================ */
-document.getElementById("gen").addEventListener("click", async function(){
-  // чистимо консоль для відладки
-  try { console.clear(); } catch(e) {}
-
+/* ---------- UI ---------- */
+document.getElementById("gen").addEventListener("click", async () => {
+  try{ console.clear(); }catch(e){}
   await waitPP();
-  setExportButtons(false);
-  clearPalettes();
+  setExport(false); clearPalettes();
 
-  const mode = (document.getElementById("src") && document.getElementById("src").value) || "doc";
+  const mode = document.getElementById("src").value; // "doc" | "layer"
   const ok = await requestPng(mode);
-  if (!ok && mode === "layer") { await requestPng("doc"); } // safety fallback
+  if (!ok) console.warn("No pixels captured (transparent/empty).");
 });
-
-document.querySelectorAll('button[data-export]').forEach(function(btn){
-  btn.addEventListener("click", function(){
+document.querySelectorAll('button[data-export]').forEach(btn=>{
+  btn.addEventListener("click", ()=>{
     const key = btn.getAttribute("data-export");
-    exportPalettePngToPhotopea(lastPalettes[key]||[], "Palette-"+key.toUpperCase()+".png");
+    exportPalette(lastPalettes[key]||[], `Palette-${key.toUpperCase()}.png`);
   });
 });
-
-function setExportButtons(v){ document.querySelectorAll('button[data-export]').forEach(function(b){ b.disabled = !v; }); }
+function setExport(v){ document.querySelectorAll('button[data-export]').forEach(b=>b.disabled=!v); }
 function clearPalettes(){
-  ["freq","bright","chroma","hue"].forEach(function(key){
-    const sw = document.querySelector('.swatches[data-swatches="'+key+'"]');
-    if (sw) sw.innerHTML = "";
-    const hx = document.querySelector('.hex[data-hex="'+key+'"]');
-    if (hx) hx.textContent = "";
-  });
+  for (const key of ["freq","bright","chroma","hue"]) {
+    const sw = document.querySelector(`.swatches[data-swatches="${key}"]`); if (sw) sw.innerHTML="";
+    const hx = document.querySelector(`.hex[data-hex="${key}"]`); if (hx) hx.textContent="";
+  }
 }
 
-/* ==================== Request PNG ======================= */
+/* ---------- Ask Photopea for PNG with strict visibility rules ---------- */
 async function requestPng(mode){
-  const got = new Promise(function(resolve){
-    const onMsg = async function(e){
-      if (!(e.data instanceof ArrayBuffer)) return;
+  const got = new Promise(resolve=>{
+    const onMsg = async (e)=>{
+      if(!(e.data instanceof ArrayBuffer)) return;
       window.removeEventListener("message", onMsg);
 
-      const blob = new Blob([e.data], { type:"image/png" });
-      const img = await blobToImage(blob);
+      const blob = new Blob([e.data], {type:"image/png"});
+      const img  = await blobToImage(blob);
 
       drawPreview(img, mode);
+      const {data,width,height} = imageToImageData(img, 768);
+      const pixels = rgbaToRgbArray(data, 1); // α≥1 only
 
-      const out = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(out.data, 1);  // α≥1
+      const diag = diagnose(pixels);
+      document.getElementById("pvDiag").innerHTML =
+        `<div>Non-transparent pixels: <b>${diag.count}</b></div>
+         <div>Avg luminance: <b>${diag.avgY.toFixed(1)}</b></div>
+         <div>Black ratio (&le;10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
 
-      const diag = diagnosePixels(pixels);
-      const pvDiag = document.getElementById("pvDiag");
-      if (pvDiag) pvDiag.innerHTML =
-        '<div>Non-transparent pixels: <b>'+diag.count+'</b></div>'
-        + '<div>Avg luminance: <b>'+diag.avgY.toFixed(1)+'</b></div>'
-        + '<div>Black ratio (&lt;=10): <b>'+ (diag.blackRate*100).toFixed(1) +'%</b></div>';
-
-      if (diag.count < 500 || diag.blackRate > 0.98) { resolve(false); return; }
-
-      runAllPalettes(out.data, out.width, out.height);
-      setExportButtons(true);
+      if (diag.count<10) { resolve(false); return; } // порожньо
+      runAllPalettes(data,width,height);
+      setExport(true);
       resolve(true);
     };
-    window.addEventListener("message", onMsg, { once:true });
+    window.addEventListener("message", onMsg, {once:true});
 
-    // інжектований скрипт у Photopea — будуємо надійно рядком .join("\n")
-    var script = (mode === "layer")
+    // Build PP script with delayed restore to beat async saveToOE
+    const script = (mode==="layer")
       ? [
           '(function(){',
-          '  var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-          '  function walk(L, out){ for (var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if (ly.layers && ly.layers.length) walk(ly.layers, out); } }',
-          '  var all=[]; walk(d.layers, all);',
-          '  var prev=new Array(all.length);',
-          '  for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=false; }',
-          '  var cl=d.currentLayer;',
-          '  if (cl){',
-          '    cl.visible=true;',
-          '    try { var p=cl.parent; while(p){ p.visible=true; p=p.parent; } } catch(e){}',
-          '  }',
-          '  d.saveToOE("png");',
-          '  for (var j=0;j<all.length;j++) all[j].visible=prev[j];',
+          ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+          ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+          ' var all=[]; walk(d.layers, all);',
+          ' var prev=new Array(all.length);',
+          ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=false; }', // OFF all
+          ' var cl=d.currentLayer;',
+          ' if(cl){',
+          '   cl.visible=true;',                            // ON only current
+          '   try{ var p=cl.parent; while(p){ p.visible=true; p=p.parent; } }catch(e){}', // parents ON so the layer is not hidden by group
+          ' }',
+          ' d.saveToOE("png");',
+          ' setTimeout(function(){ for (var j=0;j<all.length;j++) all[j].visible=prev[j]; }, 0);', // restore AFTER save
           '})();'
         ].join('\n')
       : [
           '(function(){',
-          '  var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-          '  d.saveToOE("png");',
+          ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+          ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+          ' var all=[]; walk(d.layers, all);',
+          ' var prev=new Array(all.length);',
+          ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=true; }', // FORCE all ON
+          ' d.saveToOE("png");',
+          ' setTimeout(function(){ for (var j=0;j<all.length;j++) all[j].visible=prev[j]; }, 0);', // restore AFTER save
           '})();'
         ].join('\n');
 
-    try { window.parent.postMessage(script, "*"); } catch(e){ resolve(false); }
+    try{ window.parent.postMessage(script, "*"); }catch(e){ resolve(false); }
   });
   return got;
 }
 
-/* ================ Preview + Diagnostics ================= */
+/* ---------- Preview & diagnostics ---------- */
 function drawPreview(img, mode){
-  var meta = document.getElementById("pvMeta");
-  if (meta) meta.textContent = 'Source: ' + (mode==='layer' ? 'Current layer' : 'Full document') + ' • ' + img.width + '×' + img.height + 'px';
-  var cv = document.getElementById("pvCanvas");
-  if (!cv) return;
-  var maxW = 320;
-  var scale = img.width > maxW ? maxW/img.width : 1;
-  cv.width = Math.max(1, Math.round(img.width*scale));
-  cv.height = Math.max(1, Math.round(img.height*scale));
-  var cx = cv.getContext("2d", { willReadFrequently:true });
-  cx.fillStyle = "#0a0c10"; cx.fillRect(0,0,cv.width,cv.height);
-  cx.imageSmoothingEnabled = true;
-  cx.drawImage(img, 0, 0, cv.width, cv.height);
+  document.getElementById("pvMeta").textContent =
+    `Source: ${mode==="layer"?"Current layer":"Full document"} • ${img.width}×${img.height}px`;
+  const cv=document.getElementById("pvCanvas");
+  const maxW=320, s=img.width>maxW? maxW/img.width : 1;
+  cv.width=Math.max(1,Math.round(img.width*s));
+  cv.height=Math.max(1,Math.round(img.height*s));
+  const cx=cv.getContext("2d",{willReadFrequently:true});
+  cx.fillStyle="#0a0c10"; cx.fillRect(0,0,cv.width,cv.height);
+  cx.imageSmoothingEnabled=true;
+  cx.drawImage(img,0,0,cv.width,cv.height);
 }
-function diagnosePixels(pix){
-  var n=0, sumY=0, blacks=0;
-  for (var i=0;i<pix.length;i++){
-    var p = pix[i];
-    var y = 0.2126*p[0]+0.7152*p[1]+0.0722*p[2];
-    if (y<=10) blacks++;
-    sumY += y; n++;
+function diagnose(pix){
+  let n=0,sumY=0,blacks=0;
+  for(const p of pix){ const y=0.2126*p[0]+0.7152*p[1]+0.0722*p[2]; if(y<=10) blacks++; sumY+=y; n++; }
+  return {count:n, avgY: n?sumY/n:0, blackRate:n?blacks/n:1};
+}
+
+/* ---------- Palette engine ---------- */
+const lastPalettes={freq:[],bright:[],chroma:[],hue:[]};
+function runAllPalettes(data,w,h){
+  const k=Math.max(2, Math.min(16, parseInt(document.getElementById("k").value||"6",10)));
+  const pixels = rgbaToRgbArray(data,1);
+
+  const freq   = kmeans(pixels,k); lastPalettes.freq=freq; render('freq',freq);
+  const bright = byBrightness(pixels,k); lastPalettes.bright=bright; render('bright',bright);
+  const chroma = byChroma(pixels,k);     lastPalettes.chroma=chroma; render('chroma',chroma);
+  const hue    = byHue(pixels,k);        lastPalettes.hue=hue; render('hue',hue);
+}
+
+/* ---------- Render ---------- */
+function render(key, colors){
+  const root=document.querySelector(`.swatches[data-swatches="${key}"]`);
+  root.innerHTML = colors.map(c=>`<div class="sw" title="${hex(c)}" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div>`).join('');
+  const hx=document.querySelector(`.hex[data-hex="${key}"]`);
+  if(hx) hx.textContent = colors.map(hex).join('  ');
+}
+
+/* ---------- Color / math ---------- */
+function hex([r,g,b]){ const h=n=>Math.max(0,Math.min(255,n|0)).toString(16).padStart(2,'0').toUpperCase(); return `#${h(r)}${h(g)}${h(b)}`; }
+function rgbaToRgbArray(rgba, alphaMin=1){ const out=[]; for(let i=0;i<rgba.length;i+=4){ if(rgba[i+3] < alphaMin) continue; out.push([rgba[i],rgba[i+1],rgba[i+2]]);} return out; }
+function rgbToHsl([r,g,b]){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-min; s=l>0.5? d/(2-max-min): d/(max+min); switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;} h/=6;} return [h*360,s,l]; }
+function dist2(a,b){ const dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; return dx*dx+dy*dy+dz*dz; }
+function avg(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n),Math.round(g/n),Math.round(b/n)]; }
+function sample(arr,n){ if(arr.length<=n) return arr; const out=[], step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
+
+/* Palettes */
+function kmeans(pixels,k){
+  const S=sample(pixels, Math.min(40000,pixels.length)); if(!S.length) return Array.from({length:k},()=>[0,0,0]);
+  const centers=[], used=new Set(); while(centers.length<Math.min(k,S.length)){ const i=Math.floor(Math.random()*S.length); if(!used.has(i)){ used.add(i); centers.push(S[i].slice()); } }
+  const assign=new Array(S.length).fill(0);
+  for(let it=0; it<10; it++){
+    for(let i=0;i<S.length;i++){ let bi=0,bd=Infinity,p=S[i]; for(let c=0;c<centers.length;c++){ const d=dist2(p,centers[c]); if(d<bd){bd=d;bi=c;} } assign[i]=bi; }
+    const sum=Array.from({length:centers.length},()=>[0,0,0,0]);
+    for(let i=0;i<S.length;i++){ const a=assign[i],p=S[i]; sum[a][0]+=p[0]; sum[a][1]+=p[1]; sum[a][2]+=p[2]; sum[a][3]++; }
+    for(let c=0;c<centers.length;c++){ if(sum[c][3]){ centers[c][0]=Math.round(sum[c][0]/sum[c][3]); centers[c][1]=Math.round(sum[c][1]/sum[c][3]); centers[c][2]=Math.round(sum[c][2]/sum[c][3]); } }
   }
-  return { count:n, avgY: n? sumY/n : 0, blackRate: n? blacks/n : 1 };
+  const counts=centers.map(()=>0);
+  for(const p of S){ let bi=0,bd=Infinity; for(let c=0;c<centers.length;c++){ const d=dist2(p,centers[c]); if(d<bd){bd=d;bi=c;} } counts[bi]++; }
+  return centers.map((c,i)=>({c,w:counts[i]})).sort((a,b)=>b.w-a.w).map(x=>x.c).slice(0,k);
+}
+function byBrightness(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p,y:0.2126*p[0]+0.7152*p[1]+0.0722*p[2]})).sort((a,b)=>a.y-b.y); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; }
+function byChroma(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p,s:rgbToHsl(p)[1]})).sort((a,b)=>b.s-a.s); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; }
+function byHue(pixels,k){ const bins=72, buckets=Array.from({length:bins},()=>[]); for(const p of pixels){ const [h]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); } const top=buckets.map((a,i)=>({i,n:a.length,a})).sort((A,B)=>B.n-A.n).slice(0,k).sort((A,B)=>A.i-B.i); return top.map(b=>avg(b.a.length?b.a:[[0,0,0]])); }
+
+/* ---------- Canvas helpers ---------- */
+function blobToImage(blob){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
+function imageToImageData(img, maxLong=768){
+  const long=Math.max(img.width,img.height), s=long>maxLong? maxLong/long:1;
+  const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s));
+  const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+  const cx=cv.getContext("2d",{willReadFrequently:true}); cx.drawImage(img,0,0,w,h);
+  const id=cx.getImageData(0,0,w,h); return {data:id.data,width:w,height:h};
 }
 
-/* =================== Palettes engine ==================== */
-var lastPalettes = { freq:[], bright:[], chroma:[], hue:[] };
-
-function runAllPalettes(data, w, h){
-  var k = clamp(parseInt((document.getElementById("k") && document.getElementById("k").value) || "6",10), 2, 16);
-  var pixels = rgbaToRgbArray(data, 1); // α≥1
-
-  var freq   = kmeansPalette(pixels, k);   lastPalettes.freq=freq;     renderPalette('freq', freq);
-  var bright = brightnessPalette(pixels, k); lastPalettes.bright=bright; renderPalette('bright', bright);
-  var chroma = chromaPalette(pixels, k);   lastPalettes.chroma=chroma; renderPalette('chroma', chroma);
-  var hue    = huePalette(pixels, k);      lastPalettes.hue=hue;       renderPalette('hue', hue);
-}
-
-/* ================= Rendering helpers ==================== */
-function renderPalette(key, colors){
-  var root = document.querySelector('.swatches[data-swatches="'+key+'"]');
-  if (!root) return;
-  var html = '';
-  for (var i=0;i<colors.length;i++){
-    var c = colors[i];
-    html += '<div class="sw" title="'+rgbToHex(c)+'" style="background:rgb('+c[0]+','+c[1]+','+c[2]+')"></div>';
-  }
-  root.innerHTML = html;
-  var hex = document.querySelector('.hex[data-hex="'+key+'"]');
-  if (hex) hex.textContent = colors.map(rgbToHex).join("  ");
-}
-
-/* ===================== Color utils ====================== */
-function rgbToHex(rgb){
-  var r = (rgb[0]|0), g = (rgb[1]|0), b = (rgb[2]|0);
-  function h(n){ n = Math.max(0, Math.min(255, n)); return n.toString(16).padStart(2,"0").toUpperCase(); }
-  return '#'+h(r)+h(g)+h(b);
-}
-function rgbaToRgbArray(rgba, alphaMin){
-  var out=[], aMin = alphaMin||1;
-  for (var i=0;i<rgba.length;i+=4){
-    if (rgba[i+3] < aMin) continue; // ignore fully transparent
-    out.push([rgba[i], rgba[i+1], rgba[i+2]]);
-  }
-  return out;
-}
-function rgbToHsl(rgb){
-  var r=rgb[0]/255, g=rgb[1]/255, b=rgb[2]/255;
-  var max=Math.max(r,g,b), min=Math.min(r,g,b), h=0, s=0, l=(max+min)/2;
-  if (max!==min){
-    var d=max-min;
-    s = l>0.5 ? d/(2-max-min) : d/(max+min);
-    switch(max){
-      case r: h=(g-b)/d + (g<b?6:0); break;
-      case g: h=(b-r)/d + 2; break;
-      default: h=(r-g)/d + 4;
-    }
-    h/=6;
-  }
-  return [h*360, s, l];
-}
-
-/* ===================== Palettes ========================= */
-function kmeansPalette(pixels, k){
-  var sample = sampleArray(pixels, Math.min(40000, pixels.length));
-  if (!sample.length) return Array.from({length:k}, function(){ return [0,0,0]; });
-  var centers=[], used={};
-  while (centers.length < Math.min(k, sample.length)){
-    var i=Math.floor(Math.random()*sample.length);
-    if(!used[i]){ used[i]=1; centers.push(sample[i].slice()); }
-  }
-  var assign=new Array(sample.length).fill(0);
-  for (var it=0; it<10; it++){
-    for (var i2=0;i2<sample.length;i2++){
-      var bi=0, bd=Infinity, p=sample[i2];
-      for (var c=0;c<centers.length;c++){
-        var d=dist2(p, centers[c]); if(d<bd){bd=d;bi=c;}
-      }
-      assign[i2]=bi;
-    }
-    var sum=new Array(centers.length); for (var s=0;s<centers.length;s++) sum[s]=[0,0,0,0];
-    for (var i3=0;i3<sample.length;i3++){ var a=assign[i3], pp=sample[i3]; sum[a][0]+=pp[0]; sum[a][1]+=pp[1]; sum[a][2]+=pp[2]; sum[a][3]++; }
-    for (var c2=0;c2<centers.length;c2++){ if(sum[c2][3]){ centers[c2][0]=Math.round(sum[c2][0]/sum[c2][3]); centers[c2][1]=Math.round(sum[c2][1]/sum[c2][3]); centers[c2][2]=Math.round(sum[c2][2]/sum[c2][3]); } }
-  }
-  var counts=new Array(centers.length).fill(0);
-  for (var i4=0;i4<sample.length;i4++){ var p4=sample[i4], bi2=0, bd2=Infinity; for (var c3=0;c3<centers.length;c3++){ var d2=dist2(p4, centers[c3]); if(d2<bd2){bd2=d2;bi2=c3;} } counts[bi2]++; }
-  return centers.map(function(c,i){ return {c:c,w:counts[i]}; }).sort(function(a,b){ return b.w-a.w; }).map(function(x){ return x.c; }).slice(0,k);
-}
-function brightnessPalette(pixels, k){
-  if (!pixels.length) return Array.from({length:k}, function(){ return [0,0,0]; });
-  var arr = pixels.map(function(p){ return {p:p, y:0.2126*p[0]+0.7152*p[1]+0.0722*p[2]}; }).sort(function(a,b){ return a.y-b.y; });
-  var out=[];
-  for (var i=0;i<k;i++){ var a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avgColors(arr.slice(a,b).map(function(x){return x.p;}))); }
-  return out;
-}
-function chromaPalette(pixels, k){
-  if (!pixels.length) return Array.from({length:k}, function(){ return [0,0,0]; });
-  var arr = pixels.map(function(p){ var hsl=rgbToHsl(p); return {p:p, s:hsl[1]}; }).sort(function(a,b){ return b.s-a.s; });
-  var out=[];
-  for (var i=0;i<k;i++){ var a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avgColors(arr.slice(a,b).map(function(x){return x.p;}))); }
-  return out;
-}
-function huePalette(pixels, k){
-  var bins=72, buckets=new Array(bins); for(var i=0;i<bins;i++) buckets[i]=[];
-  for (var j=0;j<pixels.length;j++){ var p=pixels[j]; var h=rgbToHsl(p)[0]; var bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); }
-  var ranked=buckets.map(function(arr,i){ return {i:i,n:arr.length,arr:arr}; })
-                    .sort(function(a,b){ return b.n-a.n; })
-                    .slice(0,k)
-                    .sort(function(a,b){ return a.i-b.i; });
-  return ranked.map(function(b){ return avgColors(b.arr.length?b.arr:[[0,0,0]]); });
-}
-
-/* ======================= Utils ========================== */
-function dist2(a,b){ var dx=a[0]-b[0], dy=a[1]-b[1], dz=a[2]-b[2]; return dx*dx+dy*dy+dz*dz; }
-function sampleArray(arr,n){ if(arr.length<=n) return arr; var out=[], step=arr.length/n; for(var i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
-function avgColors(list){ if(!list.length) return [0,0,0]; var r=0,g=0,b=0; for(var i=0;i<list.length;i++){ var p=list[i]; r+=p[0]; g+=p[1]; b+=p[2]; } var n=list.length; return [Math.round(r/n), Math.round(g/n), Math.round(b/n)]; }
-function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
-function blobToImage(blob){ return new Promise(function(res){ var img=new Image(); img.onload=function(){ res(img); }; img.src=URL.createObjectURL(blob); }); }
-function imageToImageData(img, maxLong){
-  var maxL = maxLong||768;
-  var long=Math.max(img.width, img.height), scale = long>maxL ? maxL/long : 1;
-  var w=Math.max(1, Math.round(img.width*scale)), h=Math.max(1, Math.round(img.height*scale));
-  var cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-  var cx=cv.getContext("2d", { willReadFrequently:true });
-  cx.drawImage(img,0,0,w,h);
-  var id=cx.getImageData(0,0,w,h);
-  return { data:id.data, width:w, height:h };
-}
-
-/* ======================= Export ========================= */
-async function exportPalettePngToPhotopea(colors, filename){
-  var sw=100, H=100, gap=0, name=(filename||"palette.png");
-  var W=Math.max(1, colors.length*sw + Math.max(0,colors.length-1)*gap);
-  var cv=document.createElement("canvas"); cv.width=W; cv.height=H;
-  var cx=cv.getContext("2d");
-  var x=0;
-  for (var i=0;i<colors.length;i++){ var c=colors[i]; cx.fillStyle='rgb('+c[0]+','+c[1]+','+c[2]+')'; cx.fillRect(x,0,sw,H); x+=sw+gap; }
-  var blob=await new Promise(function(res){ cv.toBlob(res,"image/png"); });
-  var ab=await blob.arrayBuffer();
-  try { window.parent.postMessage(ab, "*"); } catch(e){}
-  setTimeout(function(){ try{ window.parent.postMessage('if(app.activeDocument) app.activeDocument.name="'+name.replace(/"/g,'')+'"', "*"); }catch(e){} }, 300);
+/* ---------- Export palette ---------- */
+async function exportPalette(colors, filename){
+  const sw=100,H=100,W=Math.max(1,colors.length*sw);
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const cx=cv.getContext("2d");
+  let x=0; for(const c of colors){ cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; cx.fillRect(x,0,sw,H); x+=sw; }
+  const blob=await new Promise(res=>cv.toBlob(res,"image/png")); const ab=await blob.arrayBuffer();
+  try{ window.parent.postMessage(ab,"*"); }catch(e){}
+  setTimeout(()=>{ try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){} },300);
 }
 </script>
 </body>
