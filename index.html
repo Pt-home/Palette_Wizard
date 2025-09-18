@@ -180,7 +180,7 @@ function buildScriptCurrentLayerTempDoc(){
     ' tmp.close();',                                        // close temp
     ' app.activeDocument = d;',                             // back to original
     '})();'
-  ].join('\\n');
+  ].join('\n');
 }
 
 // FULL DOCUMENT: force all layers ON during export; send prev visibility for restore
@@ -194,7 +194,7 @@ function buildScriptFullDocWithRestore(){
     ' d.saveToOE("png");',
     ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
     '})();'
-  ].join('\\n');
+  ].join('\n');
 }
 
 // restore visibilities after Full document export
@@ -207,7 +207,7 @@ function finishRestore(prevJson){
     ' var prev='+prevJson+';',
     ' for (var i=0;i<all.length && i<prev.length;i++){ all[i].visible = !!prev[i]; }',
     '})();'
-  ].join('\\n');
+  ].join('\n');
   try{ window.parent.postMessage(restore,"*"); }catch(e){}
 }
 
@@ -300,3 +300,4 @@ async function exportPalette(colors, filename){ const sw=100,H=100,W=Math.max(1,
 </script>
 </body>
 </html>
+
