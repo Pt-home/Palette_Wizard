@@ -6,24 +6,34 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root { --gap: 10px; --sw: 36px; font-synthesis-weight:none; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; color: #111; }
-    header { padding: 14px 16px; border-bottom: 1px solid #e5e5e5; background: #fafafa; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:0; color:#111; background:#fff; }
+    @media (prefers-color-scheme: dark) {
+      body { background:#0f1115; color:#e8e8e8; }
+      header, footer { background:#0f1115; }
+      .palette { border-color:#2a2e35; }
+      .sw { border-color:#1e2228; box-shadow:none; }
+      button { border-color:#3a3f47; background:#151922; color:#e8e8e8; }
+      input[type="number"], select { background:#151922; color:#e8e8e8; border:1px solid #3a3f47; }
+    }
+    header { padding: 14px 16px; border-bottom: 1px solid #e5e5e5; background: #fafafa; position:sticky; top:0; z-index:10; }
     h1 { font-size: 16px; margin: 0 0 6px; }
-    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     label { font-size: 13px; }
-    input[type="number"] { width: 90px; padding: 6px 8px; font-size: 13px; }
-    button { padding: 8px 12px; border: 1px solid #ccc; background: #fff; border-radius: 8px; cursor: pointer; font-size: 13px; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    main { padding: 14px 16px; display: grid; gap: 16px; }
-    section.palette { border: 1px solid #eee; border-radius: 10px; padding: 12px; }
-    .titlebar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 8px; }
-    .titlebar h2 { font-size: 14px; margin: 0; }
+    input[type="number"], select { padding:6px 8px; font-size:13px; border-radius:8px; border:1px solid #ccc; }
+    input[type="number"] { width: 90px; }
+    button { padding:8px 12px; border:1px solid #ccc; background:#fff; border-radius:8px; cursor:pointer; font-size:13px; }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    main { padding:14px 16px; display:grid; gap:16px; }
+    section.palette { border:1px solid #eee; border-radius:10px; padding:12px; }
+    .titlebar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    .titlebar h2 { font-size:14px; margin:0; }
     .swatches { display:flex; gap: var(--gap); flex-wrap: wrap; }
-    .sw { width: var(--sw); height: var(--sw); border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 0 0 1px rgba(0,0,0,.04) inset; position:relative; }
-    .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; font-size: 11px; color:#444; }
-    .row2 { display:flex; align-items:center; gap:10px; margin-top: 10px; flex-wrap: wrap; }
-    .hint { font-size: 12px; color:#666; }
-    footer { padding: 10px 16px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
+    .sw { width: var(--sw); height: var(--sw); border-radius:8px; border:1px solid #ddd; box-shadow: 0 0 0 1px rgba(0,0,0,.04) inset; }
+    .hex { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; font-size: 11px; color:#666; }
+    .row2 { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+    .hint { font-size:12px; color:#666; }
+    footer { padding:10px 16px; border-top:1px solid #eee; font-size:12px; color:#666; }
   </style>
 </head>
 <body>
@@ -32,6 +42,11 @@
     <div class="row">
       <label for="k">Colors:</label>
       <input id="k" type="number" min="2" max="16" step="1" value="6" />
+      <label for="src">Source:</label>
+      <select id="src">
+        <option value="doc" selected>Full document</option>
+        <option value="layer">Current layer</option>
+      </select>
       <button id="gen">Generate</button>
       <span id="ppState" class="hint">Photopea: <b>waiting…</b></span>
     </div>
@@ -44,7 +59,9 @@
         <button data-export="freq" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="freq"></div>
-      <div class="row2"><span class="hint">Top clusters in RGB space by pixel frequency (k-means).</span></div>
+      <div class="row2">
+        <span class="hint">Top clusters in RGB space by pixel frequency (k-means).</span>
+      </div>
     </section>
 
     <section class="palette" id="pal-bright">
@@ -53,7 +70,9 @@
         <button data-export="bright" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="bright"></div>
-      <div class="row2"><span class="hint">Quantile bins across luminance (dark → light).</span></div>
+      <div class="row2">
+        <span class="hint">Quantile bins across luminance (dark → light).</span>
+      </div>
     </section>
 
     <section class="palette" id="pal-chroma">
@@ -62,7 +81,9 @@
         <button data-export="chroma" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="chroma"></div>
-      <div class="row2"><span class="hint">Groups by saturation (most vivid first).</span></div>
+      <div class="row2">
+        <span class="hint">Groups by saturation (most vivid first).</span>
+      </div>
     </section>
 
     <section class="palette" id="pal-hue">
@@ -71,60 +92,54 @@
         <button data-export="hue" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="hue"></div>
-      <div class="row2"><span class="hint">Top hue buckets around the color wheel.</span></div>
+      <div class="row2">
+        <span class="hint">Top hue buckets around the color wheel.</span>
+      </div>
     </section>
   </main>
 
   <footer>
-    Tip: The plugin hides all layers temporarily to rasterize the active one, then restores visibility.
+    Tip: If a layer is an adjustment / empty or fully transparent, the plugin falls back to the full document automatically.
   </footer>
 
 <script>
-/* ---------- Photopea bridge ---------- */
+/* ======================== Photopea bridge ======================== */
 let ppReady = false;
 let pendingResolve = null;
 
 window.addEventListener("message", async (e) => {
-  // Photopea posts back either "done" (String) or ArrayBuffer (binary)
   if (e.data === "done") {
     ppReady = true;
     document.getElementById("ppState").innerHTML = 'Photopea: <b>ready</b>';
     if (pendingResolve) { pendingResolve(); pendingResolve = null; }
-  } else if (e.data instanceof ArrayBuffer) {
-    // We got PNG of the active layer. Decode → analyze.
-    const blob = new Blob([e.data], { type: "image/png" });
-    const img = await blobToImage(blob);
-    const { data, width, height } = imageToImageData(img, 512); // downsample
-    runAllPalettes(data, width, height);
   } else if (typeof e.data === "string") {
-    // Debug echoes from scripts if you need: console.log("PP:", e.data);
+    // console.log("PP:", e.data);
   }
 });
 
-// Ask PP if it's ready (will respond with "done" once)
+// ping once to get "done"
 (function ping() {
-  // benign command — does nothing, but forces "done" back
   try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch(e){}
 })();
 
-/* ---------- UI ---------- */
+function waitForPP(){ return new Promise(r=>{ pendingResolve=r; }); }
+
+/* ========================= UI handlers ========================== */
 const genBtn = document.getElementById("gen");
 genBtn.addEventListener("click", async () => {
   if (!ppReady) await waitForPP();
-  // Script: export only the current layer as PNG to OE
-  const script = `
-    (function(){
-      var d = app.activeDocument;
-      if(!d) { app.echoToOE("No document"); return; }
-      var L = d.layers;
-      var vis = [];
-      for (var i=0; i<L.length; i++) { vis[i] = L[i].visible; L[i].visible = false; }
-      var cl = d.currentLayer; if (cl) cl.visible = true;
-      app.activeDocument.saveToOE("png"); // sends ArrayBuffer to OE
-      for (var j=0; j<L.length; j++) L[j].visible = vis[j];
-    })();
-  `;
-  window.parent.postMessage(script, "*");
+
+  setExportButtonsEnabled(false);
+  clearAllPalettes();
+
+  const mode = (document.getElementById("src")?.value) || "doc";
+
+  // 1) try user-selected mode
+  const ok1 = await requestPngFromPhotopea(mode);
+  // 2) if empty/too few pixels → fallback to document
+  if (!ok1 && mode === "layer") {
+    await requestPngFromPhotopea("doc");
+  }
 });
 
 for (const btn of document.querySelectorAll('button[data-export]')) {
@@ -135,36 +150,85 @@ for (const btn of document.querySelectorAll('button[data-export]')) {
   });
 }
 
-/* ---------- Palette engine ---------- */
+function setExportButtonsEnabled(v){
+  for (const b of document.querySelectorAll('button[data-export]')) b.disabled = !v;
+}
+function clearAllPalettes(){
+  for (const key of ["freq","bright","chroma","hue"]){
+    const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
+    if (root) root.innerHTML = "";
+    const r2 = root?.parentElement?.querySelector(".row2 .hex");
+    if (r2) r2.remove();
+  }
+}
+
+/** Ask Photopea for PNG (mode: "layer" | "doc"). Returns true if analysis ran and pixels were sufficient. */
+async function requestPngFromPhotopea(mode) {
+  return new Promise((resolve) => {
+    const onMsg = async (e) => {
+      if (e.data instanceof ArrayBuffer) {
+        window.removeEventListener("message", onMsg);
+        const blob = new Blob([e.data], { type: "image/png" });
+        const img = await blobToImage(blob);
+        const { data } = imageToImageData(img, 512);
+        const pixels = rgbaToRgbArray(data);
+        if (pixels.length < 500) { resolve(false); return; } // empty/transparent/adjustment layer
+        runAllPalettes(data, img.width, img.height);
+        setExportButtonsEnabled(true);
+        resolve(true);
+      }
+    };
+    window.addEventListener("message", onMsg, { once:false });
+
+    let script = "";
+    if (mode === "layer") {
+      script = `
+        (function(){
+          var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+          var L = d.layers, vis=[];
+          for (var i=0;i<L.length;i++){ vis[i]=L[i].visible; L[i].visible=false; }
+          var cl = d.currentLayer; if(cl) cl.visible = true;
+          d.saveToOE("png");
+          for (var j=0;j<L.length;j++) L[j].visible = vis[j];
+        })();
+      `;
+    } else {
+      script = `
+        (function(){
+          var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+          d.saveToOE("png");
+        })();
+      `;
+    }
+    window.parent.postMessage(script, "*");
+  });
+}
+
+/* ======================= Palette engine ========================= */
 const lastPalettes = { freq:[], bright:[], chroma:[], hue:[] };
 
 function runAllPalettes(data, w, h) {
-  const k = parseInt(document.getElementById("k").value || "6", 10);
-  const pixels = rgbaToRgbArray(data); // [[r,g,b],...]
+  const k = clamp(parseInt(document.getElementById("k").value || "6", 10), 2, 16);
+  const pixels = rgbaToRgbArray(data);
 
-  // 1) Frequency – k-means
+  // 1) Frequency – k-means on a sample
   const freq = kmeansPalette(pixels, k);
-  lastPalettes.freq = freq;
-  renderPalette('freq', freq);
+  lastPalettes.freq = freq; renderPalette('freq', freq);
 
   // 2) Brightness – luminance quantiles
   const bright = brightnessPalette(pixels, k);
-  lastPalettes.bright = bright;
-  renderPalette('bright', bright);
+  lastPalettes.bright = bright; renderPalette('bright', bright);
 
-  // 3) Chroma – saturation groups
+  // 3) Chroma – saturation (HSL.S) buckets
   const chroma = chromaPalette(pixels, k);
-  lastPalettes.chroma = chroma;
-  renderPalette('chroma', chroma);
+  lastPalettes.chroma = chroma; renderPalette('chroma', chroma);
 
-  // 4) Hue – top hue buckets
+  // 4) Hue – histogram buckets
   const hue = huePalette(pixels, k);
-  lastPalettes.hue = hue;
-  renderPalette('hue', hue);
-
-  for (const b of document.querySelectorAll('button[data-export]')) b.disabled = false;
+  lastPalettes.hue = hue; renderPalette('hue', hue);
 }
 
+/* ======================= Rendering helpers ====================== */
 function renderPalette(key, colors) {
   const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
   root.innerHTML = "";
@@ -175,13 +239,17 @@ function renderPalette(key, colors) {
     sw.title = rgbToHex(rgb);
     root.appendChild(sw);
   });
-  // hex line:
-  const hexLine = document.createElement("div"); hexLine.className = "hex";
+  // update HEX line (do not accumulate)
+  const row2 = root.parentElement.querySelector(".row2");
+  const old = row2.querySelector(".hex");
+  if (old) old.remove();
+  const hexLine = document.createElement("div");
+  hexLine.className = "hex";
   hexLine.textContent = colors.map(rgbToHex).join("  ");
-  root.parentElement.querySelector(".row2")?.appendChild(hexLine);
+  row2.appendChild(hexLine);
 }
 
-/* ---------- Color math ---------- */
+/* ========================== Color math ========================== */
 function rgbToHex([r,g,b]) {
   const h = (n)=> n.toString(16).padStart(2,'0').toUpperCase();
   return `#${h(r)}${h(g)}${h(b)}`;
@@ -211,41 +279,25 @@ function rgbToHsl([r,g,b]) {
   }
   return [h*360, s, l];
 }
-function hslToRgb([h,s,l]) {
-  h/=360;
-  let r,g,b;
-  if(s===0){ r=g=b=l; }
-  else {
-    const hue2rgb=(p,q,t)=>{ if(t<0) t+=1; if(t>1) t-=1;
-      if(t<1/6) return p+(q-p)*6*t;
-      if(t<1/2) return q;
-      if(t<2/3) return p+(q-p)*(2/3 - t)*6;
-      return p;
-    };
-    const q = l<0.5 ? l*(1+s) : l+s-l*s;
-    const p = 2*l - q;
-    r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
-  }
-  return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
-}
 
-/* ---------- Palettes ---------- */
+/* ========================== Palettes ============================ */
 function kmeansPalette(pixels, k) {
-  // sample to speed up
   const sample = sampleArray(pixels, Math.min(40000, pixels.length));
-  // init centroids by k-means++ light (random unique)
+  if (sample.length === 0) return Array.from({length:k}, ()=>[0,0,0]);
+
+  // init: random unique
   const centers = [];
   const used = new Set();
-  while (centers.length < k && centers.length < sample.length) {
+  while (centers.length < Math.min(k, sample.length)) {
     const idx = Math.floor(Math.random()*sample.length);
-    if (used.has(idx)) continue;
-    used.add(idx); centers.push(sample[idx].slice());
+    if (!used.has(idx)) { used.add(idx); centers.push(sample[idx].slice()); }
   }
   const assign = new Array(sample.length).fill(0);
+
   for (let it=0; it<10; it++) {
-    // assignment
+    // assign
     for (let i=0;i<sample.length;i++){
-      let best=0, bestd=1e12, p=sample[i];
+      let best=0, bestd=Infinity, p=sample[i];
       for (let c=0;c<centers.length;c++){
         const d = dist2(p, centers[c]);
         if (d<bestd){bestd=d;best=c;}
@@ -266,10 +318,10 @@ function kmeansPalette(pixels, k) {
       }
     }
   }
-  // weight clusters by population (on full sample)
+  // rank by population
   const counts = centers.map(()=>0);
   for (const p of sample){
-    let best=0, bestd=1e12;
+    let best=0, bestd=Infinity;
     for (let c=0;c<centers.length;c++){
       const d=dist2(p, centers[c]); if(d<bestd){bestd=d;best=c;}
     }
@@ -282,6 +334,7 @@ function kmeansPalette(pixels, k) {
     .slice(0,k);
 }
 function brightnessPalette(pixels, k) {
+  if (!pixels.length) return Array.from({length:k}, ()=>[0,0,0]);
   const arr = pixels.map(p => ({p, y: 0.2126*p[0]+0.7152*p[1]+0.0722*p[2]}))
                     .sort((a,b)=>a.y-b.y);
   const out = [];
@@ -289,12 +342,12 @@ function brightnessPalette(pixels, k) {
     const a = Math.floor(i*arr.length/k);
     const b = Math.floor((i+1)*arr.length/k);
     const slice = arr.slice(a,b);
-    if (slice.length===0) continue;
     out.push(avgColors(slice.map(x=>x.p)));
   }
   return out;
 }
 function chromaPalette(pixels, k) {
+  if (!pixels.length) return Array.from({length:k}, ()=>[0,0,0]);
   const arr = pixels.map(p => {
     const [h,s,l]=rgbToHsl(p);
     return {p, s};
@@ -304,7 +357,6 @@ function chromaPalette(pixels, k) {
     const a = Math.floor(i*arr.length/k);
     const b = Math.floor((i+1)*arr.length/k);
     const slice = arr.slice(a,b);
-    if (slice.length===0) continue;
     out.push(avgColors(slice.map(x=>x.p)));
   }
   return out;
@@ -320,11 +372,10 @@ function huePalette(pixels, k) {
   const ranked = buckets.map((arr,i)=>({i,n:arr.length,arr}))
                         .sort((a,b)=>b.n-a.n)
                         .slice(0,k);
-  // order by hue angle around the wheel for nice layout
-  return ranked.sort((a,b)=>a.i-b.i).map(b=>avgColors(b.arr.length?b.arr:[ [0,0,0] ]));
+  return ranked.sort((a,b)=>a.i-b.i).map(b=>avgColors(b.arr.length?b.arr:[[0,0,0]]));
 }
 
-/* ---------- Helpers ---------- */
+/* ========================== Utils =============================== */
 function dist2(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1], dz=a[2]-b[2]; return dx*dx+dy*dy+dz*dz; }
 function sampleArray(arr, n){
   if (arr.length<=n) return arr;
@@ -333,11 +384,13 @@ function sampleArray(arr, n){
   return out;
 }
 function avgColors(list){
+  if (!list.length) return [0,0,0];
   let r=0,g=0,b=0;
   for (const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; }
-  const n = list.length || 1;
+  const n = list.length;
   return [Math.round(r/n), Math.round(g/n), Math.round(b/n)];
 }
+function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
 function blobToImage(blob){
   return new Promise((res)=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); });
 }
@@ -351,9 +404,8 @@ function imageToImageData(img, maxW=512){
   const id=cx.getImageData(0,0,w,h);
   return { data: id.data, width:w, height:h };
 }
-function waitForPP(){ return new Promise(r=>{ pendingResolve=r; }); }
 
-/* ---------- Export: build PNG and send to Photopea ---------- */
+/* ========================== Export ============================== */
 async function exportPalettePngToPhotopea(colors, filename="palette.png"){
   const sw = 100, h = 100, gap = 0;
   const w = colors.length*sw + Math.max(0, colors.length-1)*gap;
@@ -367,10 +419,8 @@ async function exportPalettePngToPhotopea(colors, filename="palette.png"){
   });
   const blob = await new Promise(res=>cv.toBlob(res, "image/png"));
   const ab = await blob.arrayBuffer();
-  // Send binary to PP → opens as a new document
   window.parent.postMessage(ab, "*");
-  // Optionally label the document after open (not critical)
-  setTimeout(()=>{ 
+  setTimeout(()=>{
     window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`, "*");
   }, 300);
 }
