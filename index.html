@@ -21,7 +21,7 @@
     .pv-head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
     .pv-info { font-size:12px; color:#9aa1ab; }
     .pv-wrap { display:flex; gap:12px; align-items:center; }
-    .pv-wrap canvas { width:160px; height:auto; border-radius:6px; border:1px solid #2a2e35; background:#0a0c10; }
+    .pv-wrap canvas { width:180px; height:auto; border-radius:6px; border:1px solid #2a2e35; background:#0a0c10; }
     section.palette { border:1px solid #2a2e35; border-radius:10px; padding:12px; }
     .titlebar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
     .titlebar h2 { font-size:14px; margin:0; }
@@ -98,7 +98,7 @@
   </main>
 
   <footer>
-    If the layer is adjustment/empty, the plugin falls back to the full document automatically.
+    Transparent pixels are ignored in analysis.
   </footer>
 
 <script>
@@ -108,7 +108,6 @@ window.addEventListener("message", (e) => {
   if (e.data === "done") { ppReady = true; if (waiter) { waiter(); waiter=null; } }
 });
 try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch (e) {}
-
 function waitPP(){ return new Promise(r => { if (ppReady) r(); else waiter = r; }); }
 
 /* ======================== UI ============================ */
@@ -120,7 +119,7 @@ genBtn.addEventListener("click", async () => {
 
   const mode = (document.getElementById("src")?.value) || "doc";
   const ok = await requestPng(mode);
-  if (!ok && mode === "layer") { await requestPng("doc"); }
+  if (!ok && mode === "layer") { await requestPng("doc"); } // safety fallback
 });
 
 for (const btn of document.querySelectorAll('button[data-export]')) {
@@ -128,7 +127,7 @@ for (const btn of document.querySelectorAll('button[data-export]')) {
     const key = btn.getAttribute("data-export");
     exportPalettePngToPhotopea(lastPalettes[key]||[], `Palette-${key.toUpperCase()}.png`);
   });
-}
+});
 
 function setExportButtons(v){ document.querySelectorAll('button[data-export]').forEach(b=>b.disabled=!v); }
 function clearPalettes(){
@@ -153,7 +152,7 @@ async function requestPng(mode){
       drawPreview(img, mode);
 
       const { data, width, height } = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(data, 1);
+      const pixels = rgbaToRgbArray(data, 1);  // α≥1 → чисто непорожні
 
       const diag = diagnosePixels(pixels);
       document.getElementById("pvDiag").innerHTML =
@@ -169,16 +168,40 @@ async function requestPng(mode){
     };
     window.addEventListener("message", onMsg);
 
+    // --- robust PP script for both modes ---
     const script = (mode === "layer")
-      ? `(function(){
-            var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
-            var L=d.layers, vis=[];
-            for (var i=0;i<L.length;i++){ vis[i]=L[i].visible; L[i].visible=false; }
-            if (d.currentLayer) d.currentLayer.visible = true;
-            d.saveToOE("png");
-            for (var j=0;j<L.length;j++) L[j].visible = vis[j];
-         })();`
-      : `(function(){ var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; } d.saveToOE("png"); })();`;
+      ? `
+        (function(){
+          var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+
+          // collect ALL layers recursively
+          function walk(L, out){
+            for (var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if (ly.layers && ly.layers.length) walk(ly.layers, out); }
+          }
+          var all=[]; walk(d.layers, all);
+
+          // remember visibility & hide all
+          var prev=new Array(all.length);
+          for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=false; }
+
+          // show ONLY current layer + its ancestor groups (if any)
+          var cl=d.currentLayer;
+          if (cl){
+            cl.visible=true;
+            try { var p=cl.parent; while(p){ p.visible=true; p=p.parent; } } catch(e){}
+          }
+
+          // export pixels of this isolated layer (rest is transparent)
+          d.saveToOE("png");
+
+          // restore visibility
+          for (var j=0;j<all.length;j++) all[j].visible=prev[j];
+        })();`
+      : `
+        (function(){
+          var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+          d.saveToOE("png"); // full document composite
+        })();`;
 
     try { window.parent.postMessage(script, "*"); } catch(e){ resolve(false); }
   });
@@ -190,13 +213,12 @@ function drawPreview(img, mode){
   const meta = document.getElementById("pvMeta");
   meta.textContent = `Source: ${mode==="layer" ? "Current layer" : "Full document"} • ${img.width}×${img.height}px`;
   const cv = document.getElementById("pvCanvas");
-  const maxW = 300;
+  const maxW = 320;
   const scale = img.width > maxW ? maxW/img.width : 1;
   cv.width = Math.max(1, Math.round(img.width*scale));
   cv.height = Math.max(1, Math.round(img.height*scale));
   const cx = cv.getContext("2d", { willReadFrequently:true });
-  cx.fillStyle = "#0a0c10";
-  cx.fillRect(0,0,cv.width,cv.height);
+  cx.fillStyle = "#0a0c10"; cx.fillRect(0,0,cv.width,cv.height);
   cx.imageSmoothingEnabled = true;
   cx.drawImage(img, 0, 0, cv.width, cv.height);
 }
@@ -215,7 +237,7 @@ const lastPalettes = { freq:[], bright:[], chroma:[], hue:[] };
 
 function runAllPalettes(data, w, h){
   const k = clamp(parseInt(document.getElementById("k").value||"6",10), 2, 16);
-  const pixels = rgbaToRgbArray(data, 1);
+  const pixels = rgbaToRgbArray(data, 1); // α≥1
 
   const freq   = kmeansPalette(pixels, k);   lastPalettes.freq=freq;     renderPalette('freq', freq);
   const bright = brightnessPalette(pixels, k); lastPalettes.bright=bright; renderPalette('bright', bright);
@@ -240,7 +262,7 @@ function rgbToHex([r,g,b]){
 function rgbaToRgbArray(rgba, alphaMin=1){
   const out=[];
   for (let i=0;i<rgba.length;i+=4){
-    if (rgba[i+3] < alphaMin) continue;
+    if (rgba[i+3] < alphaMin) continue; // ignore fully transparent
     out.push([rgba[i], rgba[i+1], rgba[i+2]]);
   }
   return out;
