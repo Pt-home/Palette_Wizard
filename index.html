@@ -110,74 +110,81 @@ function clearPalettes(){
   }
 }
 
-/* ===== Core: strict visibility with whitelist + two-phase restore ===== */
+/* ===== Core ===== */
 async function requestPng(mode){
-  let prevVis=null, gotPNG=false;
-
+  // handler (one ArrayBuffer for both modes, plus "__VIS__" only for Full document)
+  let gotPNG=false, prevVis=null;
   const onMsg = async (e)=>{
     if (e.data instanceof ArrayBuffer) {
-      // PNG
       const img = await blobToImage(new Blob([e.data], {type:"image/png"}));
       drawPreview(img, mode);
       const {data,width,height} = imageToImageData(img, 768);
       const pixels = rgbaToRgbArray(data, 1);
-
       const diag = diagnose(pixels);
       document.getElementById("pvDiag").innerHTML =
         `<div>Non-transparent pixels: <b>${diag.count}</b></div>
          <div>Avg luminance: <b>${diag.avgY.toFixed(1)}</b></div>
          <div>Black ratio (&le;10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
-
       if (diag.count>=10){
         runAllPalettes(data,width,height);
         setExport(true);
       }
-      gotPNG = true;
-      if (gotPNG && prevVis !== null) finishRestore(prevVis);
-    } else if (typeof e.data === "string" && e.data.startsWith("__VIS__")) {
+      gotPNG=true;
+      // only Full document needs restore
+      if (mode==="doc" && prevVis!==null) finishRestore(prevVis);
+    } else if (typeof e.data==="string" && e.data.startsWith("__VIS__")) {
       prevVis = e.data.substring(7);
-      if (gotPNG && prevVis !== null) finishRestore(prevVis);
+      if (gotPNG) finishRestore(prevVis);
     }
   };
   window.addEventListener("message", onMsg);
 
-  const script = (mode==="layer") ? buildScriptCurrentLayer() : buildScriptFullDoc();
+  // Build Photopea script
+  const script = (mode==="layer") ? buildScriptCurrentLayerTempDoc()
+                                  : buildScriptFullDocWithRestore();
+
   try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
 
-  // wait up to 4s for both messages
+  // wait (up to 4s) for PNG (and possibly restore state)
   const ok = await new Promise(resolve=>{
     const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 4000);
-    const chk = setInterval(()=>{ if (gotPNG && prevVis!==null){ clearTimeout(t); clearInterval(chk); window.removeEventListener("message", onMsg); resolve(true);} }, 50);
+    const chk = setInterval(()=>{ if (gotPNG && (mode==="layer" || prevVis!==null)){ clearTimeout(t); clearInterval(chk); window.removeEventListener("message", onMsg); resolve(true);} }, 50);
   });
   return ok;
 }
 
-function buildScriptCurrentLayer(){
-  // 1) збираємо whitelist: currentLayer + усі батьківські групи
-  // 2) одним проходом виставляємо visible = (в whitelist)
+/* === Photopea scripts === */
+
+// CURRENT LAYER: duplicate the active layer into a temporary document, save, close
+function buildScriptCurrentLayerTempDoc(){
+  // Uses Photoshop-like DOM supported by Photopea (documents.add, layer.duplicate, saveToOE, close) — see docs. 
   return [
     '(function(){',
     ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-    ' var all=[]; walk(d.layers, all);',
-    ' var keep={}; var cl=d.currentLayer;',
-    ' if(cl){ keep[cl._id||cl.id||"k"]=true; try{ var p=cl.parent; while(p){ keep[p._id||p.id||("g"+Math.random())]=true; p=p.parent; } }catch(e){} }',
-    ' var prev=[];',
-    ' for (var i=0;i<all.length;i++){',
-    '   var ly=all[i]; prev[i]=!!ly.visible;',
+    ' var cl=d.currentLayer; if(!cl){ app.echoToOE("No current layer"); return; }',
+    ' var w=d.width, h=d.height;',
+    ' var tmp = app.documents.add(w, h);',                 // temp doc
+    ' try {',
+    '   cl.duplicate(tmp);',                                // duplicate into tmp
+    ' } catch (e) {',                                       // Fallback: copy/paste
+    '   try {',
+    '     app.activeDocument = d; d.activeLayer = cl;',
+    '     var desc = new ActionDescriptor();',
+    '     executeAction(stringIDToTypeID("copy"), desc);',
+    '     app.activeDocument = tmp;',
+    '     executeAction(stringIDToTypeID("paste"), new ActionDescriptor());',
+    '   } catch (e2) {}',
     ' }',
-    ' for (var i=0;i<all.length;i++){',
-    '   var ly=all[i];',
-    '   var key = (ly._id||ly.id||("k"+i));',
-    '   ly.visible = !!keep[key];',
-    ' }',
-    ' d.saveToOE("png");',
-    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
+    ' app.activeDocument = tmp;',
+    ' tmp.saveToOE("png");',                                // send PNG to OE
+    ' tmp.close();',                                        // close temp
+    ' app.activeDocument = d;',                             // back to original
     '})();'
-  ].join('\n');
+  ].join('\\n');
 }
 
-function buildScriptFullDoc(){
+// FULL DOCUMENT: force all layers ON during export; send prev visibility for restore
+function buildScriptFullDocWithRestore(){
   return [
     '(function(){',
     ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
@@ -187,9 +194,10 @@ function buildScriptFullDoc(){
     ' d.saveToOE("png");',
     ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
     '})();'
-  ].join('\n');
+  ].join('\\n');
 }
 
+// restore visibilities after Full document export
 function finishRestore(prevJson){
   const restore = [
     '(function(){',
@@ -199,7 +207,7 @@ function finishRestore(prevJson){
     ' var prev='+prevJson+';',
     ' for (var i=0;i<all.length && i<prev.length;i++){ all[i].visible = !!prev[i]; }',
     '})();'
-  ].join('\n');
+  ].join('\\n');
   try{ window.parent.postMessage(restore,"*"); }catch(e){}
 }
 
@@ -270,9 +278,7 @@ function brightnessPalette(pixels,k){
 }
 function chromaPalette(pixels,k){
   if(!pixels.length) return Array.from({length:k},()=>[0,0,0]);
-  let arr=pixels.map(p=>{ const s=rgbToHsl(p)[1]; return {p,s}; })
-                .sort((a,b)=>b.s-a.s);
-  if (!arr.length) return Array.from({length:k},()=>[0,0,0]);
+  let arr=pixels.map(p=>{ const s=rgbToHsl(p)[1]; return {p,s}; }).sort((a,b)=>b.s-a.s);
   return fairBuckets(arr,k).map(b=>avg(b.map(x=>x.p)));
 }
 function huePalette(pixels,k){
