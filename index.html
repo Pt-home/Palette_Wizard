@@ -47,7 +47,7 @@
     </div>
   </header>
 
-  <!-- Mini preview of what we actually analyze -->
+  <!-- Preview of the exact raster being analyzed -->
   <section class="preview">
     <div class="pv-head">
       <strong>Analysis Preview</strong>
@@ -60,40 +60,40 @@
   </section>
 
   <main>
-    <section class="palette" id="pal-freq">
+    <section class="palette">
       <div class="titlebar">
         <h2>By Frequency</h2>
         <button data-export="freq" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="freq"></div>
-      <div class="row2"><span class="hex"></span></div>
+      <div class="row2"><span class="hex" data-hex="freq"></span></div>
     </section>
 
-    <section class="palette" id="pal-bright">
+    <section class="palette">
       <div class="titlebar">
         <h2>By Brightness</h2>
         <button data-export="bright" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="bright"></div>
-      <div class="row2"><span class="hex"></span></div>
+      <div class="row2"><span class="hex" data-hex="bright"></span></div>
     </section>
 
-    <section class="palette" id="pal-chroma">
+    <section class="palette">
       <div class="titlebar">
         <h2>By Chroma</h2>
         <button data-export="chroma" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="chroma"></div>
-      <div class="row2"><span class="hex"></span></div>
+      <div class="row2"><span class="hex" data-hex="chroma"></span></div>
     </section>
 
-    <section class="palette" id="pal-hue">
+    <section class="palette">
       <div class="titlebar">
         <h2>By Hue</h2>
         <button data-export="hue" disabled>Export to Photopea</button>
       </div>
       <div class="swatches" data-swatches="hue"></div>
-      <div class="row2"><span class="hex"></span></div>
+      <div class="row2"><span class="hex" data-hex="hue"></span></div>
     </section>
   </main>
 
@@ -103,25 +103,22 @@
 
 <script>
 /* ======================== Bridge ======================== */
-let ppReady = false;
-let waiter = null;
-
-// one-time ping to get "done" from Photopea (no “ready” label in UI)
+let ppReady = false, waiter = null;
 window.addEventListener("message", (e) => {
   if (e.data === "done") { ppReady = true; if (waiter) { waiter(); waiter=null; } }
 });
 try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch (e) {}
 
-function waitPP() { return new Promise(r => { if (ppReady) r(); else waiter = r; }); }
+function waitPP(){ return new Promise(r => { if (ppReady) r(); else waiter = r; }); }
 
 /* ======================== UI ============================ */
 const genBtn = document.getElementById("gen");
 genBtn.addEventListener("click", async () => {
   await waitPP();
   setExportButtons(false);
-  clearAllPalettes();
+  clearPalettes();
 
-  const mode = document.getElementById("src").value || "doc";
+  const mode = (document.getElementById("src")?.value) || "doc";
   const ok = await requestPng(mode);
   if (!ok && mode === "layer") { await requestPng("doc"); }
 });
@@ -129,100 +126,88 @@ genBtn.addEventListener("click", async () => {
 for (const btn of document.querySelectorAll('button[data-export]')) {
   btn.addEventListener("click", () => {
     const key = btn.getAttribute("data-export");
-    exportPalettePngToPhotopea(lastPalettes[key] || [], `Palette-${key.toUpperCase()}.png`);
+    exportPalettePngToPhotopea(lastPalettes[key]||[], `Palette-${key.toUpperCase()}.png`);
   });
-});
+}
 
-function setExportButtons(v){ for (const b of document.querySelectorAll('button[data-export]')) b.disabled = !v; }
-function clearAllPalettes(){
-  for (const key of ["freq","bright","chroma","hue"]) {
-    const root = qs(`.swatches[data-swatches="${key}"]`);
-    root.innerHTML = "";
-    const hex = root.parentElement.querySelector(".row2 .hex");
-    if (hex) hex.textContent = "";
-  }
+function setExportButtons(v){ document.querySelectorAll('button[data-export]').forEach(b=>b.disabled=!v); }
+function clearPalettes(){
+  ["freq","bright","chroma","hue"].forEach(key=>{
+    const sw = document.querySelector(`.swatches[data-swatches="${key}"]`);
+    if (sw) sw.innerHTML = "";
+    const hx = document.querySelector(`.hex[data-hex="${key}"]`);
+    if (hx) hx.textContent = "";
+  });
 }
 
 /* ==================== Request PNG ======================= */
 async function requestPng(mode){
-  // one-shot listener for this request
   const got = new Promise((resolve) => {
     const onMsg = async (e) => {
       if (!(e.data instanceof ArrayBuffer)) return;
       window.removeEventListener("message", onMsg);
 
-      // decode -> preview canvas -> analyze
-      const blob = new Blob([e.data], { type: "image/png" });
+      const blob = new Blob([e.data], { type:"image/png" });
       const img = await blobToImage(blob);
 
-      // draw into preview
       drawPreview(img, mode);
 
-      // analyze (downsample to 768 on the long side)
       const { data, width, height } = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(data, 1); // keep almost all pixels (alpha >= 1)
+      const pixels = rgbaToRgbArray(data, 1);
 
       const diag = diagnosePixels(pixels);
       document.getElementById("pvDiag").innerHTML =
         `<div>Non-transparent pixels: <b>${diag.count}</b></div>
-         <div>Avg luminance (0..255): <b>${diag.avgY.toFixed(1)}</b></div>
+         <div>Avg luminance: <b>${diag.avgY.toFixed(1)}</b></div>
          <div>Black ratio (&lt;=10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
 
-      // if too few / too black → treat as failure
       if (diag.count < 500 || diag.blackRate > 0.98) { resolve(false); return; }
 
       runAllPalettes(data, width, height);
       setExportButtons(true);
       resolve(true);
     };
-    window.addEventListener("message", onMsg, { once:true });
+    window.addEventListener("message", onMsg);
+
+    const script = (mode === "layer")
+      ? `(function(){
+            var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
+            var L=d.layers, vis=[];
+            for (var i=0;i<L.length;i++){ vis[i]=L[i].visible; L[i].visible=false; }
+            if (d.currentLayer) d.currentLayer.visible = true;
+            d.saveToOE("png");
+            for (var j=0;j<L.length;j++) L[j].visible = vis[j];
+         })();`
+      : `(function(){ var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; } d.saveToOE("png"); })();`;
+
+    try { window.parent.postMessage(script, "*"); } catch(e){ resolve(false); }
   });
-
-  // minimal PP script
-  const script = (mode === "layer")
-    ? `
-      (function(){
-        var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
-        var L=d.layers, vis=[];
-        for (var i=0;i<L.length;i++){ vis[i]=L[i].visible; L[i].visible=false; }
-        if (d.currentLayer) d.currentLayer.visible = true;
-        d.saveToOE("png");
-        for (var j=0;j<L.length;j++) L[j].visible = vis[j];
-      })();`
-    : `
-      (function(){
-        var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }
-        d.saveToOE("png");
-      })();`;
-
-  window.parent.postMessage(script, "*");
-  return await got;
+  return got;
 }
 
 /* ================ Preview + Diagnostics ================= */
 function drawPreview(img, mode){
   const meta = document.getElementById("pvMeta");
-  meta.textContent = `Source: ${mode === "layer" ? "Current layer" : "Full document"} • ${img.width}×${img.height}px`;
+  meta.textContent = `Source: ${mode==="layer" ? "Current layer" : "Full document"} • ${img.width}×${img.height}px`;
   const cv = document.getElementById("pvCanvas");
   const maxW = 300;
   const scale = img.width > maxW ? maxW/img.width : 1;
-  cv.width = Math.max(1, Math.round(img.width * scale));
-  cv.height = Math.max(1, Math.round(img.height * scale));
+  cv.width = Math.max(1, Math.round(img.width*scale));
+  cv.height = Math.max(1, Math.round(img.height*scale));
   const cx = cv.getContext("2d", { willReadFrequently:true });
   cx.fillStyle = "#0a0c10";
   cx.fillRect(0,0,cv.width,cv.height);
   cx.imageSmoothingEnabled = true;
   cx.drawImage(img, 0, 0, cv.width, cv.height);
 }
-
 function diagnosePixels(pix){
   let n=0, sumY=0, blacks=0;
   for (const p of pix){
     const y = 0.2126*p[0]+0.7152*p[1]+0.0722*p[2];
-    if (y <= 10) blacks++;
+    if (y<=10) blacks++;
     sumY += y; n++;
   }
-  return { count:n, avgY: n? (sumY/n):0, blackRate: n? (blacks/n):1 };
+  return { count:n, avgY: n? sumY/n : 0, blackRate: n? blacks/n : 1 };
 }
 
 /* =================== Palettes engine ==================== */
@@ -232,34 +217,30 @@ function runAllPalettes(data, w, h){
   const k = clamp(parseInt(document.getElementById("k").value||"6",10), 2, 16);
   const pixels = rgbaToRgbArray(data, 1);
 
-  const freq = kmeansPalette(pixels, k);   lastPalettes.freq=freq;   renderPalette('freq', freq);
+  const freq   = kmeansPalette(pixels, k);   lastPalettes.freq=freq;     renderPalette('freq', freq);
   const bright = brightnessPalette(pixels, k); lastPalettes.bright=bright; renderPalette('bright', bright);
-  const chroma = chromaPalette(pixels, k); lastPalettes.chroma=chroma; renderPalette('chroma', chroma);
-  const hue = huePalette(pixels, k);       lastPalettes.hue=hue;     renderPalette('hue', hue);
+  const chroma = chromaPalette(pixels, k);   lastPalettes.chroma=chroma; renderPalette('chroma', chroma);
+  const hue    = huePalette(pixels, k);      lastPalettes.hue=hue;       renderPalette('hue', hue);
 }
 
 /* ================= Rendering helpers ==================== */
 function renderPalette(key, colors){
-  const root = qs(`.swatches[data-swatches="${key}"]`);
-  root.innerHTML = "";
-  for (const rgb of colors){
-    const sw = document.createElement("div");
-    sw.className = "sw";
-    sw.style.background = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    sw.title = rgbToHex(rgb);
-    root.appendChild(sw);
-  }
-  const hex = root.parentElement.querySelector(".row2 .hex");
-  hex.textContent = colors.map(rgbToHex).join("  ");
+  const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
+  if (!root) return;
+  root.innerHTML = colors.map(c=>`<div class="sw" title="${rgbToHex(c)}" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div>`).join("");
+  const hex = document.querySelector(`.hex[data-hex="${key}"]`);
+  if (hex) hex.textContent = colors.map(rgbToHex).join("  ");
 }
 
 /* ===================== Color utils ====================== */
-function rgbToHex([r,g,b]){ const h=n=>n.toString(16).padStart(2,'0').toUpperCase(); return `#${h(r)}${h(b)}${h(g)}`.replace(/^#(..)(..)(..)$/, (_,rr,gg,bb)=>`#${rr}${gg}${bb}`); }
+function rgbToHex([r,g,b]){
+  const h = n => Math.max(0, Math.min(255, n|0)).toString(16).padStart(2,"0").toUpperCase();
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
 function rgbaToRgbArray(rgba, alphaMin=1){
   const out=[];
   for (let i=0;i<rgba.length;i+=4){
-    const a = rgba[i+3];
-    if (a < alphaMin) continue; // be lenient: keep almost all
+    if (rgba[i+3] < alphaMin) continue;
     out.push([rgba[i], rgba[i+1], rgba[i+2]]);
   }
   return out;
@@ -321,7 +302,7 @@ function chromaPalette(pixels, k){
 }
 function huePalette(pixels, k){
   const bins=72, buckets=Array.from({length:bins},()=>[]);
-  for (const p of pixels){ const [h,s,l]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); }
+  for (const p of pixels){ const [h]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); }
   const ranked=buckets.map((arr,i)=>({i,n:arr.length,arr})).sort((a,b)=>b.n-a.n).slice(0,k).sort((a,b)=>a.i-b.i);
   return ranked.map(b=>avgColors(b.arr.length?b.arr:[[0,0,0]]));
 }
@@ -331,8 +312,7 @@ function dist2(a,b){ const dx=a[0]-b[0], dy=a[1]-b[1], dz=a[2]-b[2]; return dx*d
 function sampleArray(arr,n){ if(arr.length<=n) return arr; const out=[]; const step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
 function avgColors(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n), Math.round(g/n), Math.round(b/n)]; }
 function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
-function qs(s){ return document.querySelector(s); }
-function blobToImage(blob){ return new Promise(res => { const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
+function blobToImage(blob){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
 function imageToImageData(img, maxLong=768){
   const long=Math.max(img.width, img.height), scale = long>maxLong ? maxLong/long : 1;
   const w=Math.max(1, Math.round(img.width*scale)), h=Math.max(1, Math.round(img.height*scale));
@@ -346,15 +326,15 @@ function imageToImageData(img, maxLong=768){
 /* ======================= Export ========================= */
 async function exportPalettePngToPhotopea(colors, filename="palette.png"){
   const sw=100, H=100, gap=0;
-  const W = Math.max(1, colors.length*sw + Math.max(0,colors.length-1)*gap);
+  const W=Math.max(1, colors.length*sw + Math.max(0,colors.length-1)*gap);
   const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   const cx=cv.getContext("2d");
   let x=0;
   for (const rgb of colors){ cx.fillStyle=`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; cx.fillRect(x,0,sw,H); x+=sw+gap; }
-  const blob = await new Promise(res=>cv.toBlob(res,"image/png"));
-  const ab = await blob.arrayBuffer();
-  window.parent.postMessage(ab, "*");
-  setTimeout(()=>{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`, "*"); }, 300);
+  const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
+  const ab=await blob.arrayBuffer();
+  try { window.parent.postMessage(ab, "*"); } catch(e){}
+  setTimeout(()=>{ try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`, "*"); }catch(e){} }, 300);
 }
 </script>
 </body>
