@@ -110,31 +110,14 @@ function clearPalettes(){
   }
 }
 
-/* ===== Core: request PNG with strict layer logic and two-phase restore ===== */
+/* ===== Core: strict visibility with whitelist + two-phase restore ===== */
 async function requestPng(mode){
-  // we expect two messages: ArrayBuffer (PNG) and "__VIS__[...]"
-  let prevVis=null, gotPNG=null;
-  const finishIfReady = ()=> {
-    if (gotPNG && prevVis) {
-      // send restore script now
-      const restore = [
-        '(function(){',
-        ' var d=app.activeDocument; if(!d) return;',
-        ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-        ' var all=[]; walk(d.layers, all);',
-        ' var prev='+prevVis+';',
-        ' for (var i=0;i<all.length && i<prev.length;i++){ all[i].visible = !!prev[i]; }',
-        '})();'
-      ].join('\n');
-      try{ window.parent.postMessage(restore,"*"); }catch(e){}
-    }
-  };
+  let prevVis=null, gotPNG=false;
 
-  const handler = async (e)=>{
+  const onMsg = async (e)=>{
     if (e.data instanceof ArrayBuffer) {
-      // got PNG
-      const blob = new Blob([e.data], {type:"image/png"});
-      const img = await blobToImage(blob);
+      // PNG
+      const img = await blobToImage(new Blob([e.data], {type:"image/png"}));
       drawPreview(img, mode);
       const {data,width,height} = imageToImageData(img, 768);
       const pixels = rgbaToRgbArray(data, 1);
@@ -148,65 +131,76 @@ async function requestPng(mode){
       if (diag.count>=10){
         runAllPalettes(data,width,height);
         setExport(true);
-        gotPNG = true;
-        finishIfReady();
-      } else {
-        gotPNG = true;
-        finishIfReady();
       }
+      gotPNG = true;
+      if (gotPNG && prevVis !== null) finishRestore(prevVis);
     } else if (typeof e.data === "string" && e.data.startsWith("__VIS__")) {
-      prevVis = e.data.substring(7); // JSON text
-      finishIfReady();
+      prevVis = e.data.substring(7);
+      if (gotPNG && prevVis !== null) finishRestore(prevVis);
     }
   };
-  window.addEventListener("message", handler);
-  // build Photopea script
-  const script = (mode==="layer")
-    ? [
-        '(function(){',
-        ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-        ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-        ' var all=[]; walk(d.layers, all);',
-        ' var prev=new Array(all.length);',
-        ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=false; }', // OFF all
-        ' var cl=d.currentLayer;',
-        ' if(cl){',
-        '   cl.visible=true;',
-        '   try{ var p=cl.parent; while(p){ p.visible=true; p=p.parent; } }catch(e){}',
-        ' }',
-        ' d.saveToOE("png");',
-        ' app.echoToOE("__VIS__"+JSON.stringify(prev));', // send previous visibility for later restore
-        '})();'
-      ].join('\n')
-    : [
-        '(function(){',
-        ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-        ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-        ' var all=[]; walk(d.layers, all);',
-        ' var prev=new Array(all.length);',
-        ' for (var i=0;i<all.length;i++){ prev[i]=all[i].visible; all[i].visible=true; }', // FORCE all ON
-        ' d.saveToOE("png");',
-        ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
-        '})();'
-      ].join('\n');
+  window.addEventListener("message", onMsg);
 
+  const script = (mode==="layer") ? buildScriptCurrentLayer() : buildScriptFullDoc();
   try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
 
-  // wait until we receive both messages or timeout safeguard
+  // wait up to 4s for both messages
   const ok = await new Promise(resolve=>{
-    const t = setTimeout(()=>{
-      window.removeEventListener("message", handler);
-      resolve(false);
-    }, 4000);
-    const check = setInterval(()=>{
-      if (gotPNG && prevVis){
-        clearTimeout(t); clearInterval(check);
-        window.removeEventListener("message", handler);
-        resolve(true);
-      }
-    }, 50);
+    const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 4000);
+    const chk = setInterval(()=>{ if (gotPNG && prevVis!==null){ clearTimeout(t); clearInterval(chk); window.removeEventListener("message", onMsg); resolve(true);} }, 50);
   });
   return ok;
+}
+
+function buildScriptCurrentLayer(){
+  // 1) збираємо whitelist: currentLayer + усі батьківські групи
+  // 2) одним проходом виставляємо visible = (в whitelist)
+  return [
+    '(function(){',
+    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+    ' var all=[]; walk(d.layers, all);',
+    ' var keep={}; var cl=d.currentLayer;',
+    ' if(cl){ keep[cl._id||cl.id||"k"]=true; try{ var p=cl.parent; while(p){ keep[p._id||p.id||("g"+Math.random())]=true; p=p.parent; } }catch(e){} }',
+    ' var prev=[];',
+    ' for (var i=0;i<all.length;i++){',
+    '   var ly=all[i]; prev[i]=!!ly.visible;',
+    ' }',
+    ' for (var i=0;i<all.length;i++){',
+    '   var ly=all[i];',
+    '   var key = (ly._id||ly.id||("k"+i));',
+    '   ly.visible = !!keep[key];',
+    ' }',
+    ' d.saveToOE("png");',
+    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
+    '})();'
+  ].join('\n');
+}
+
+function buildScriptFullDoc(){
+  return [
+    '(function(){',
+    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+    ' var all=[]; walk(d.layers, all);',
+    ' var prev=[]; for (var i=0;i<all.length;i++){ prev[i]=!!all[i].visible; all[i].visible=true; }',
+    ' d.saveToOE("png");',
+    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
+    '})();'
+  ].join('\n');
+}
+
+function finishRestore(prevJson){
+  const restore = [
+    '(function(){',
+    ' var d=app.activeDocument; if(!d) return;',
+    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+    ' var all=[]; walk(d.layers, all);',
+    ' var prev='+prevJson+';',
+    ' for (var i=0;i<all.length && i<prev.length;i++){ all[i].visible = !!prev[i]; }',
+    '})();'
+  ].join('\n');
+  try{ window.parent.postMessage(restore,"*"); }catch(e){}
 }
 
 /* ===== Preview & diagnostics ===== */
@@ -231,12 +225,14 @@ function diagnose(pix){
 /* ===== Palettes ===== */
 const lastPalettes={freq:[],bright:[],chroma:[],hue:[]};
 function runAllPalettes(data,w,h){
-  const k=Math.max(2, Math.min(16, parseInt(document.getElementById("k").value||"6",10)));
-  const pixels=rgbaToRgbArray(data,1);
-  const freq=kmeans(pixels,k);      lastPalettes.freq=freq;    render('freq',freq);
-  const bright=byBrightness(pixels,k); lastPalettes.bright=bright; render('bright',bright);
-  const chroma=byChroma(pixels,k);  lastPalettes.chroma=chroma; render('chroma',chroma);
-  const hue=byHue(pixels,k);        lastPalettes.hue=hue;      render('hue',hue);
+  const kRaw = parseInt(document.getElementById("k").value||"6",10);
+  const pixels = rgbaToRgbArray(data, 1);
+  const k = Math.max(2, Math.min(16, Math.min(kRaw, pixels.length || 2)));
+
+  const freq   = kmeans(pixels, k);        lastPalettes.freq=freq;    render('freq',freq);
+  const bright = brightnessPalette(pixels,k); lastPalettes.bright=bright; render('bright',bright);
+  const chroma = chromaPalette(pixels,k);  lastPalettes.chroma=chroma; render('chroma',chroma);
+  const hue    = huePalette(pixels,k);     lastPalettes.hue=hue;      render('hue',hue);
 }
 function render(key, colors){
   const root=document.querySelector(`.swatches[data-swatches="${key}"]`);
@@ -267,9 +263,29 @@ function kmeans(pixels,k){
   for(const p of S){ let bi=0,bd=Infinity; for(let c=0;c<centers.length;c++){ const d=dist2(p,centers[c]); if(d<bd){bd=d;bi=c;} } counts[bi]++; }
   return centers.map((c,i)=>({c,w:counts[i]})).sort((a,b)=>b.w-a.w).map(x=>x.c).slice(0,k);
 }
-function byBrightness(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p,y:0.2126*p[0]+0.7152*p[1]+0.0722*p[2]})).sort((a,b)=>a.y-b.y); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; }
-function byChroma(pixels,k){ if(!pixels.length) return Array.from({length:k},()=>[0,0,0]); const arr=pixels.map(p=>({p:sat(p)})).sort((a,b)=>b.p-a.p); const out=[]; for(let i=0;i<k;i++){ const a=Math.floor(i*arr.length/k), b=Math.floor((i+1)*arr.length/k); out.push(avg(arr.slice(a,b).map(x=>x.p))); } return out; function sat(p){return rgbToHsl(p)[1];} }
-function byHue(pixels,k){ const bins=72,buckets=Array.from({length:bins},()=>[]); for(const p of pixels){ const [h]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); } const top=buckets.map((a,i)=>({i,n:a.length,a})).sort((A,B)=>B.n-A.n).slice(0,k).sort((A,B)=>A.i-B.i); return top.map(b=>avg(b.a.length?b.a:[[0,0,0]])); }
+function brightnessPalette(pixels,k){
+  if(!pixels.length) return Array.from({length:k},()=>[0,0,0]);
+  const arr=pixels.map(p=>({p,y:0.2126*p[0]+0.7152*p[1]+0.0722*p[2]})).sort((a,b)=>a.y-b.y);
+  return fairBuckets(arr,k).map(b=>avg(b.map(x=>x.p)));
+}
+function chromaPalette(pixels,k){
+  if(!pixels.length) return Array.from({length:k},()=>[0,0,0]);
+  let arr=pixels.map(p=>{ const s=rgbToHsl(p)[1]; return {p,s}; })
+                .sort((a,b)=>b.s-a.s);
+  if (!arr.length) return Array.from({length:k},()=>[0,0,0]);
+  return fairBuckets(arr,k).map(b=>avg(b.map(x=>x.p)));
+}
+function huePalette(pixels,k){
+  const bins=72, buckets=Array.from({length:bins},()=>[]);
+  for(const p of pixels){ const [h]=rgbToHsl(p); const bi=Math.floor(((h%360)+360)%360/(360/bins)); buckets[bi].push(p); }
+  const top=buckets.map((a,i)=>({i,n:a.length,a})).sort((A,B)=>B.n-A.n).slice(0,k).sort((A,B)=>A.i-B.i);
+  return top.map(b=>avg(b.a.length?b.a:[[0,0,0]]));
+}
+function fairBuckets(arr,k){
+  const n=arr.length, base=Math.floor(n/k), extra=n%k, out=[]; let idx=0;
+  for(let i=0;i<k;i++){ const size=Math.max(1, base+(i<extra?1:0)); out.push(arr.slice(idx, idx+size)); idx+=size; }
+  return out;
+}
 
 /* ===== Canvas / export ===== */
 function blobToImage(blob){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
