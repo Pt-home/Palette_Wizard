@@ -158,25 +158,42 @@ async function requestPng(mode){
 
 /* === Photopea scripts === */
 
-// CURRENT LAYER: selectAll + copy (active layer only) → paste into TEMP doc → PNG → close
+// CURRENT LAYER → TEMP DOC (перший шлях: duplicate(); запасний — copy без merged)
 function buildScriptCurrentLayerTempDoc(){
   return [
     '(function(){',
     ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
     ' var cl=d.currentLayer; if(!cl){ app.echoToOE("No current layer"); return; }',
-    ' var w=d.width, h=d.height;',
-    ' var tmp = app.documents.add(w, h);',          // create empty temp doc
-    ' app.activeDocument = d; d.activeLayer = cl;', // ensure correct active layer',
+    ' var tmp = app.documents.add(d.width, d.height);',
+    ' // 1) ПЕРШИЙ ШЛЯХ: пряме дублювання шару у temp-документ',
     ' try {',
-    '   // select all and COPY ONLY FROM ACTIVE LAYER (not merged)',
+    '   app.activeDocument = d; d.activeLayer = cl;',
+    '   cl.duplicate(tmp);',
+    '   app.activeDocument = tmp;',
+    '   tmp.saveToOE("png");',
+    '   tmp.close();',
+    '   app.activeDocument = d;',
+    '   return;',
+    ' } catch (e) { /* перейдемо на запасний шлях */ }',
+    ' // 2) ЗАПАСНИЙ: selectAll + copy (copyMerged=false) → paste у temp-док',
+    ' try {',
+    '   app.activeDocument = d; d.activeLayer = cl;',
     '   executeAction(stringIDToTypeID("selectAll"), new ActionDescriptor());',
-    '   executeAction(stringIDToTypeID("copy"), new ActionDescriptor());',
-    ' } catch(e) { app.echoToOE("Copy failed"); }',
-    ' app.activeDocument = tmp;',
-    ' try { executeAction(stringIDToTypeID("paste"), new ActionDescriptor()); } catch(e) {}',
-    ' tmp.saveToOE("png");',
-    ' tmp.close();',
+    '   var desc = new ActionDescriptor();',
+    '   // Критично: копіюємо ТІЛЬКИ активний шар, без merged',
+    '   desc.putBoolean(stringIDToTypeID("copyMerged"), false);',
+    '   executeAction(stringIDToTypeID("copy"), desc);',
+    '   app.activeDocument = tmp;',
+    '   executeAction(stringIDToTypeID("paste"), new ActionDescriptor());',
+    '   tmp.saveToOE("png");',
+    '   tmp.close();',
+    '   app.activeDocument = d;',
+    '   return;',
+    ' } catch (e2) { /* впало — сигналізуємо */ }',
+    ' // якщо ми тут — обидва шляхи не вдались',
+    ' try { app.activeDocument = tmp; tmp.close(); } catch(_e) {}',
     ' app.activeDocument = d;',
+    ' app.echoToOE("__ERR__copy_failed");',
     '})();'
   ].join('\n');
 }
@@ -298,3 +315,4 @@ async function exportPalette(colors, filename){ const sw=100,H=100,W=Math.max(1,
 </script>
 </body>
 </html>
+
