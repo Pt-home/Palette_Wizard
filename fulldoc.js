@@ -137,10 +137,19 @@ function runAllPalettes(data, w, h) {
 }
 function render(key, colors) {
   const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
-  root.innerHTML = colors.map(c => `<div class="sw" title="${hex(c)}" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div>`).join('');
+  root.innerHTML = colors.map(c => {
+    const h = hex(c);
+    return `
+      <div class="chip">
+        <div class="sw" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div>
+        <div class="code">${h}</div>
+      </div>
+    `;
+  }).join('');
   const hx = document.querySelector(`.hex[data-hex="${key}"]`);
-  if (hx) hx.textContent = colors.map(hex).join('  ');
+  if (hx) hx.textContent = "";
 }
+
 
 /* ---------- Color / math ---------- */
 function hex([r,g,b]) {
