@@ -1,30 +1,20 @@
 /* ---------- Bridge with Photopea ---------- */
-let ppReady = false;
-let waiter = null;
 let awaitingPNG = false;
 
+// Single global listener
 window.addEventListener("message", async (e) => {
-  // Photopea environment handshake
-  if (e.data === "done") {
-    ppReady = true;
-    if (waiter) { waiter(); waiter = null; }
-    return;
-  }
-
+  // Ignore if we are not expecting data
   if (!awaitingPNG) return;
 
-  // Got PNG from Photopea
   if (e.data instanceof ArrayBuffer) {
+    console.log("[PW] PNG received from Photopea (%d bytes)", e.data.byteLength);
     try {
       const blob = new Blob([e.data], { type: "image/png" });
       const img = await blobToImage(blob);
       drawPreview(img);
       const { data, width, height } = imageToImageData(img, 768);
+      const pixels = rgbaToRgbArray(data, 1); // ignore alpha=0
 
-      // Remove fully transparent pixels from analysis
-      const pixels = rgbaToRgbArray(data, 1);
-
-      // Diagnostics
       const diag = diagnose(pixels);
       document.getElementById("pvDiag").innerHTML =
         `<div>Non-transparent pixels: <b>${diag.count}</b></div>
@@ -35,33 +25,42 @@ window.addEventListener("message", async (e) => {
         runAllPalettes(data, width, height);
         setExport(true);
       } else {
-        console.warn("PNG contained too few non-transparent pixels.");
+        console.warn("[PW] PNG contained too few non-transparent pixels.");
       }
     } finally {
       awaitingPNG = false;
     }
   } else if (typeof e.data === "string" && e.data.startsWith("__ERR__")) {
-    console.error(e.data);
+    console.error("[PW] Photopea error:", e.data);
     awaitingPNG = false;
   }
 });
 
-// Try to ping Photopea on load
-try { window.parent.postMessage("app.echoToOE('ping')", "*"); } catch (e) {}
-function waitPP() { return new Promise(r => { if (ppReady) r(); else waiter = r; }); }
+// Optional ping (not awaited)
+try {
+  window.parent.postMessage("app.echoToOE('ping')", "*");
+  console.log("[PW] Sent ping to Photopea");
+} catch (e) {
+  console.warn("[PW] Could not ping Photopea:", e);
+}
 
 /* ---------- UI ---------- */
-document.getElementById("gen").addEventListener("click", async () => {
+document.getElementById("gen").addEventListener("click", () => {
   try { console.clear(); } catch (e) {}
-  await waitPP();
+  console.log("[PW] Generate clicked");
+
   setExport(false);
   clearPalettes();
   awaitingPNG = true;
 
-  // Send a minimal Photopea script: export current document as-is (no visibility changes)
   const script = script_FullDocument_AsIs();
-  try { window.parent.postMessage(script, "*"); }
-  catch (e) { console.error("Failed to send script:", e); awaitingPNG = false; }
+  console.log("[PW] Sending export script to Photopea");
+  try {
+    window.parent.postMessage(script, "*");
+  } catch (e) {
+    console.error("[PW] Failed to send script:", e);
+    awaitingPNG = false;
+  }
 });
 
 document.querySelectorAll('button[data-export]').forEach(btn => {
@@ -85,7 +84,7 @@ function clearPalettes() {
 
 /* ---------- Photopea script (no visibility changes) ---------- */
 function script_FullDocument_AsIs() {
-  // Export exactly what the user sees; do not modify any layer visibility.
+  // Keep script tiny and free of problematic characters; join lines with \n
   return [
     '(function(){',
     '  var d = app.activeDocument;',
@@ -97,8 +96,8 @@ function script_FullDocument_AsIs() {
 
 /* ---------- Preview & diagnostics ---------- */
 function drawPreview(img) {
-  const meta = document.getElementById("pvMeta");
-  meta.textContent = `Source: Full document • ${img.width}×${img.height}px`;
+  document.getElementById("pvMeta").textContent =
+    `Source: Full document • ${img.width}×${img.height}px`;
 
   const cv = document.getElementById("pvCanvas");
   const maxW = 320;
@@ -128,13 +127,13 @@ const lastPalettes = { freq: [], bright: [], chroma: [], hue: [] };
 
 function runAllPalettes(data, w, h) {
   const kRaw = parseInt(document.getElementById("k").value || "6", 10);
-  const pixels = rgbaToRgbArray(data, 1); // ignore alpha = 0
+  const pixels = rgbaToRgbArray(data, 1);
   const k = Math.max(2, Math.min(16, Math.min(kRaw, pixels.length || 2)));
 
-  const freq   = kmeans(pixels, k);           lastPalettes.freq   = freq;   render('freq',   freq);
-  const bright = brightnessPalette(pixels, k); lastPalettes.bright = bright; render('bright', bright);
-  const chroma = chromaPalette(pixels, k);     lastPalettes.chroma = chroma; render('chroma', chroma);
-  const hue    = huePalette(pixels, k);        lastPalettes.hue    = hue;    render('hue',    hue);
+  const freq   = kmeans(pixels, k);            lastPalettes.freq   = freq;   render('freq',   freq);
+  const bright = brightnessPalette(pixels, k);  lastPalettes.bright = bright; render('bright', bright);
+  const chroma = chromaPalette(pixels, k);      lastPalettes.chroma = chroma; render('chroma', chroma);
+  const hue    = huePalette(pixels, k);         lastPalettes.hue    = hue;    render('hue',    hue);
 }
 function render(key, colors) {
   const root = document.querySelector(`.swatches[data-swatches="${key}"]`);
@@ -279,7 +278,7 @@ function imageToImageData(img, maxLong=768){
   const w=Math.max(1,Math.round(img.width*s));
   const h=Math.max(1,Math.round(img.height*s));
   const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-  const cx=cv.getContext("2d",{willReadFrequently:true}); // faster readback
+  const cx=cv.getContext("2d",{willReadFrequently:true}); // faster readback hint
   cx.drawImage(img,0,0,w,h);
   const id=cx.getImageData(0,0,w,h);
   return {data:id.data,width:w,height:h};
@@ -297,8 +296,7 @@ async function exportPalette(colors, filename){
   const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
   const ab=await blob.arrayBuffer();
   try{ window.parent.postMessage(ab,"*"); }catch(e){}
-  setTimeout(()=>{ // optional rename of the newly created doc in PP
+  setTimeout(()=>{ // optional rename
     try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){}
   },300);
 }
-
