@@ -112,14 +112,14 @@ function clearPalettes(){
 
 /* ===== Core ===== */
 async function requestPng(mode){
-  let gotPNG=false, prevVis=null;
+  let gotPNG=false;
 
   const onMsg = async (e)=>{
     if (e.data instanceof ArrayBuffer) {
       const img = await blobToImage(new Blob([e.data], {type:"image/png"}));
       drawPreview(img, mode);
       const {data,width,height} = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(data, 1);
+      const pixels = rgbaToRgbArray(data, 1); // ignore alpha=0
 
       const diag = diagnose(pixels);
       document.getElementById("pvDiag").innerHTML =
@@ -132,164 +132,96 @@ async function requestPng(mode){
         setExport(true);
       }
       gotPNG=true;
-      if (mode==="doc" && prevVis!==null) finishRestore(prevVis);
-    } else if (typeof e.data === "string" && e.data.startsWith("__VIS__")) {
-      prevVis = e.data.substring(7);
-      if (gotPNG) finishRestore(prevVis);
+    } else if (typeof e.data === "string" && e.data === "__ERR__copy_failed") {
+      console.error("Current layer export failed in both duplication and copy paths.");
+      gotPNG=true; // unblock wait to avoid hanging
     }
   };
   window.addEventListener("message", onMsg);
 
-  const script = (mode==="layer") ? buildScriptCurrentLayerTempDoc()
-                                  : buildScriptFullDocWithRestore();
+  const script = (mode==="layer") ? buildScript_CurrentLayer_viaTempDoc()
+                                  : buildScript_FullDoc_viaTempDoc();
 
   try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
 
+  // Wait until PNG (or explicit error) arrives (timeout 5s)
   const ok = await new Promise(resolve=>{
-    const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 4000);
+    const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 5000);
     const chk = setInterval(()=>{
-      if (gotPNG && (mode==="layer" || prevVis!==null)){
-        clearTimeout(t); clearInterval(chk); window.removeEventListener("message", onMsg); resolve(true);
+      if (gotPNG){
+        clearTimeout(t); clearInterval(chk);
+        window.removeEventListener("message", onMsg);
+        resolve(true);
       }
     }, 50);
   });
   return ok;
 }
 
-/* === Photopea scripts === */
+/* === Photopea scripts (constructed as single strings with real \n) === */
 
-// CURRENT LAYER - Method 1: Duplicate layer to new document
-function buildScriptCurrentLayerTempDoc(){
+/** CURRENT LAYER (robust):
+ *  1) Preorder-index all layers in original doc and remember index of currentLayer.
+ *  2) Duplicate the whole document to a temp doc.
+ *  3) In temp doc, take the layer with the same preorder index.
+ *  4) Turn ALL layers OFF, turn target layer and its parents ON.
+ *  5) saveToOE("png"), close temp, return to original.
+ *  This never touches visibility in the user's document.
+ */
+function buildScript_CurrentLayer_viaTempDoc(){
   return [
     '(function(){',
-    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-    ' var cl=d.activeLayer; if(!cl){ app.echoToOE("No active layer"); return; }',
-    ' ',
-    ' // Method 1: Try duplicating the layer to a new document',
+    ' var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' function walk(L, out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers, out); } }',
+    ' var all = []; walk(d.layers, all);',
+    ' var cl = d.currentLayer; if(!cl){ app.echoToOE("No current layer"); return; }',
+    ' var targetIndex = -1;',
+    ' for (var i=0;i<all.length;i++){ if (all[i]===cl){ targetIndex=i; break; } }',
+    ' if (targetIndex<0){ app.echoToOE("__ERR__copy_failed"); return; }',
+    ' // Duplicate the WHOLE document to a temporary one (safe, does not touch user doc)',
+    ' var tmp = d.duplicate();',
+    ' try { app.activeDocument = tmp; } catch(e){}',
+    ' // Re-index in temp and pick the same preorder index',
+    ' function walk2(L, out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk2(ly.layers, out); } }',
+    ' var all2 = []; walk2(tmp.layers, all2);',
+    ' if (targetIndex>=all2.length){ app.echoToOE("__ERR__copy_failed"); try{ tmp.close(); }catch(e){} try{ app.activeDocument=d; }catch(e){} return; }',
+    ' var tgt = all2[targetIndex];',
+    ' // Turn everything OFF in temp',
+    ' for (var i=0;i<all2.length;i++){ try{ all2[i].visible = false; }catch(_e){} }',
+    ' // Turn target and its parents ON',
     ' try {',
-    '   var w=d.width, h=d.height;',
-    '   var tmp = app.documents.add(w, h);',
-    '   app.activeDocument = d;',
-    '   d.activeLayer = cl;',
-    '   ',
-    '   // Duplicate current layer to the new document',
-    '   var desc = new ActionDescriptor();',
-    '   var ref = new ActionReference();',
-    '   ref.putEnumerated(stringIDToTypeID("layer"), stringIDToTypeID("ordinal"), stringIDToTypeID("targetEnum"));',
-    '   desc.putReference(stringIDToTypeID("null"), ref);',
-    '   var ref2 = new ActionReference();',
-    '   ref2.putName(stringIDToTypeID("document"), tmp.name);',
-    '   desc.putReference(stringIDToTypeID("to"), ref2);',
-    '   desc.putInteger(stringIDToTypeID("version"), 5);',
-    '   executeAction(stringIDToTypeID("duplicate"), desc);',
-    '   ',
-    '   app.activeDocument = tmp;',
-    '   tmp.saveToOE("png");',
-    '   tmp.close();',
-    '   app.activeDocument = d;',
-    ' } catch(e1) {',
-    '   // Method 2: Fallback - Hide all other layers temporarily',
-    '   app.echoToOE("Method 1 failed, trying method 2");',
-    '   try {',
-    '     if(tmp) tmp.close();',
-    '   } catch(e) {}',
-    '   ',
-    '   app.activeDocument = d;',
-    '   var allLayers = [];',
-    '   var visStates = [];',
-    '   ',
-    '   function collectLayers(layers) {',
-    '     for(var i = 0; i < layers.length; i++) {',
-    '       allLayers.push(layers[i]);',
-    '       visStates.push(layers[i].visible);',
-    '       if(layers[i].layers && layers[i].layers.length > 0) {',
-    '         collectLayers(layers[i].layers);',
-    '       }',
-    '     }',
-    '   }',
-    '   ',
-    '   collectLayers(d.layers);',
-    '   ',
-    '   // Hide all layers except the current one',
-    '   for(var i = 0; i < allLayers.length; i++) {',
-    '     if(allLayers[i] !== cl) {',
-    '       allLayers[i].visible = false;',
-    '     } else {',
-    '       allLayers[i].visible = true;',
-    '     }',
-    '   }',
-    '   ',
-    '   // Export the document with only current layer visible',
-    '   d.saveToOE("png");',
-    '   ',
-    '   // Restore visibility states',
-    '   for(var i = 0; i < allLayers.length; i++) {',
-    '     allLayers[i].visible = visStates[i];',
-    '   }',
-    ' }',
+    '   tgt.visible = true;',
+    '   var p = tgt.parent;',
+    '   while(p){ try{ p.visible = true; }catch(__){} p = p.parent; }',
+    ' } catch(e) {}',
+    ' // Export and close temp',
+    ' try { tmp.saveToOE("png"); } catch(e) { app.echoToOE("__ERR__copy_failed"); }',
+    ' try { tmp.close(); } catch(e) {}',
+    ' try { app.activeDocument = d; } catch(e) {}',
     '})();'
   ].join('\n');
 }
 
-// Alternative implementation - simpler approach
-function buildScriptCurrentLayerTempDocAlt(){
+/** FULL DOCUMENT (safe):
+ *  1) Duplicate the whole document to a temp doc.
+ *  2) Turn ALL layers ON in temp.
+ *  3) saveToOE("png"), close temp, return to original.
+ *  User doc is never touched.
+ */
+function buildScript_FullDoc_viaTempDoc(){
   return [
     '(function(){',
-    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-    ' var cl=d.activeLayer; if(!cl){ app.echoToOE("No active layer"); return; }',
-    ' ',
-    ' // Store visibility states and hide all other layers',
-    ' var layers = [];',
-    ' var states = [];',
-    ' ',
-    ' function walk(L) {',
-    '   for(var i = 0; i < L.length; i++) {',
-    '     layers.push(L[i]);',
-    '     states.push(L[i].visible);',
-    '     if(L[i].layers && L[i].layers.length) walk(L[i].layers);',
-    '   }',
-    ' }',
-    ' ',
-    ' walk(d.layers);',
-    ' ',
-    ' // Set only current layer visible',
-    ' for(var i = 0; i < layers.length; i++) {',
-    '   layers[i].visible = (layers[i] === cl);',
-    ' }',
-    ' ',
-    ' // Save and restore',
-    ' d.saveToOE("png");',
-    ' ',
-    ' for(var i = 0; i < layers.length; i++) {',
-    '   layers[i].visible = states[i];',
-    ' }',
-    '})();'
-  ].join('\n');
-}
-
-// FULL DOCUMENT: force ALL layers ON during export; send prev visibility for restore
-function buildScriptFullDocWithRestore(){
-  return [
-    '(function(){',
-    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-    ' var all=[]; walk(d.layers, all);',
-    ' var prev=[]; for (var i=0;i<all.length;i++){ prev[i]=!!all[i].visible; all[i].visible=true; }',
-    ' d.saveToOE("png");',
-    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
-    '})();'
-  ].join('\n');
-}
-
-// restore visibilities after Full document export
-function finishRestore(prevJson){
-  const restore = [
-    '(function(){',
-    ' var d=app.activeDocument; if(!d) return;',
-    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-    ' var all=[]; walk(d.layers, all);',
-    ' var prev='+prevJson+';',
-    ' for (var i=0;i<all.length && i<prev.length;i++){ all[i].visible = !!prev[i]; }',
+    ' var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' function walk(L, out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers, out); } }',
+    ' // Duplicate the whole document',
+    ' var tmp = d.duplicate();',
+    ' try { app.activeDocument = tmp; } catch(e){}',
+    ' var all = []; walk(tmp.layers, all);',
+    ' // Force all visible in temp',
+    ' for (var i=0;i<all.length;i++){ try{ all[i].visible = true; }catch(_e){} }',
+    ' try { tmp.saveToOE("png"); } catch(e) {}',
+    ' try { tmp.close(); } catch(e) {}',
+    ' try { app.activeDocument = d; } catch(e) {}',
     '})();'
   ].join('\n');
 }
