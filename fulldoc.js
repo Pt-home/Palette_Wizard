@@ -295,19 +295,27 @@ function imageToImageData(img, maxLong=768){
   return {data:id.data,width:w,height:h};
 }
 async function exportPalette(colors, filename){
-  const sw=100,H=100,W=Math.max(1,colors.length*sw);
+  
+  const base = String(filename || "Palette").replace(/\.[A-Za-z0-9]+$/, "");
+
+  const sw=100, H=100, W=Math.max(1, colors.length*sw);
   const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
   const cx=cv.getContext("2d");
-  let x=0;
-  for(const c of colors){
-    cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
-    cx.fillRect(x,0,sw,H);
-    x+=sw;
-  }
-  const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
-  const ab=await blob.arrayBuffer();
-  try{ window.parent.postMessage(ab,"*"); }catch(e){}
-  setTimeout(()=>{ // optional rename
-    try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){}
-  },300);
+  let x=0; for(const c of colors){ cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; cx.fillRect(x,0,sw,H); x+=sw; }
+
+  const blob = await new Promise(res=>cv.toBlob(res,"image/png"));
+  const ab = await blob.arrayBuffer();
+
+  try { window.parent.postMessage(ab,"*"); } catch(e) {}
+
+  
+  setTimeout(()=> {
+    try {
+      window.parent.postMessage(
+        `if(app.activeDocument) app.activeDocument.name="${base.replace(/"/g,"")}"`,
+        "*"
+      );
+    } catch(e) {}
+  }, 300);
 }
+
