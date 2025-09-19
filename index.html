@@ -80,13 +80,13 @@
   <footer>Transparent pixels are ignored in analysis.</footer>
 
 <script>
-/* ===== Bridge ===== */
+/* ================= Bridge with Photopea ================= */
 let ppReady=false, waiter=null;
 window.addEventListener("message", e => { if(e.data==="done"){ ppReady=true; if(waiter){waiter(); waiter=null;} }});
 try{ window.parent.postMessage("app.echoToOE('ping')","*"); }catch(e){}
 function waitPP(){ return new Promise(r=>{ if(ppReady) r(); else waiter=r; }); }
 
-/* ===== UI ===== */
+/* ================= UI ================= */
 document.getElementById("gen").addEventListener("click", async () => {
   try{ console.clear(); }catch(e){}
   await waitPP();
@@ -96,6 +96,7 @@ document.getElementById("gen").addEventListener("click", async () => {
   const ok = await requestPng(mode);
   if (!ok) console.warn("No pixels captured (transparent/empty).");
 });
+
 document.querySelectorAll('button[data-export]').forEach(btn=>{
   btn.addEventListener("click", ()=>{
     const key = btn.getAttribute("data-export");
@@ -110,16 +111,18 @@ function clearPalettes(){
   }
 }
 
-/* ===== Core ===== */
+/* ================= Core export flow ================= */
+/** We export PNG and (when needed) a visibility snapshot. We restore vis after both are received. */
 async function requestPng(mode){
-  let gotPNG=false;
+  let gotPNG=false, visJSON=null;
 
   const onMsg = async (e)=>{
     if (e.data instanceof ArrayBuffer) {
+      // Got PNG
       const img = await blobToImage(new Blob([e.data], {type:"image/png"}));
       drawPreview(img, mode);
       const {data,width,height} = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(data, 1); // ignore alpha=0
+      const pixels = rgbaToRgbArray(data, 1);
 
       const diag = diagnose(pixels);
       document.getElementById("pvDiag").innerHTML =
@@ -131,24 +134,25 @@ async function requestPng(mode){
         runAllPalettes(data,width,height);
         setExport(true);
       }
-      gotPNG=true;
-    } else if (typeof e.data === "string" && e.data === "__ERR__copy_failed") {
-      console.error("Current layer export failed in both duplication and copy paths.");
-      gotPNG=true; // unblock wait to avoid hanging
+      gotPNG = true;
+      if (visJSON!==null) restoreVisibility(visJSON);
+    } else if (typeof e.data === "string" && e.data.startsWith("__VIS__")) {
+      visJSON = e.data.substring(7);
+      if (gotPNG) restoreVisibility(visJSON);
     }
   };
   window.addEventListener("message", onMsg);
 
-  const script = (mode==="layer") ? buildScript_CurrentLayer_viaTempDoc()
-                                  : buildScript_FullDoc_viaTempDoc();
+  const script = (mode==="layer") ? scriptCurrentLayerSolo()
+                                  : scriptFullDocumentSolo();
 
   try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
 
-  // Wait until PNG (or explicit error) arrives (timeout 5s)
+  // Wait until PNG (and for Full Doc / Current Layer we also expect __VIS__)
   const ok = await new Promise(resolve=>{
     const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 5000);
     const chk = setInterval(()=>{
-      if (gotPNG){
+      if (gotPNG && visJSON!==null){
         clearTimeout(t); clearInterval(chk);
         window.removeEventListener("message", onMsg);
         resolve(true);
@@ -158,75 +162,66 @@ async function requestPng(mode){
   return ok;
 }
 
-/* === Photopea scripts (constructed as single strings with real \n) === */
-
-/** CURRENT LAYER (robust):
- *  1) Preorder-index all layers in original doc and remember index of currentLayer.
- *  2) Duplicate the whole document to a temp doc.
- *  3) In temp doc, take the layer with the same preorder index.
- *  4) Turn ALL layers OFF, turn target layer and its parents ON.
- *  5) saveToOE("png"), close temp, return to original.
- *  This never touches visibility in the user's document.
+/* ================= Photopea scripts (strings with real \n) ================= */
+/** CURRENT LAYER (solo-visibility in original doc; fast and reliable)
+ *  1) Flatten list of all layers (preorder).
+ *  2) Save their visibility.
+ *  3) Turn ALL off.
+ *  4) Turn currentLayer ON + all its parents ON.
+ *  5) saveToOE("png").
+ *  6) Send back the visibility snapshot to restore afterwards.
  */
-function buildScript_CurrentLayer_viaTempDoc(){
+function scriptCurrentLayerSolo(){
   return [
     '(function(){',
-    ' var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-    ' function walk(L, out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers, out); } }',
-    ' var all = []; walk(d.layers, all);',
-    ' var cl = d.currentLayer; if(!cl){ app.echoToOE("No current layer"); return; }',
-    ' var targetIndex = -1;',
-    ' for (var i=0;i<all.length;i++){ if (all[i]===cl){ targetIndex=i; break; } }',
-    ' if (targetIndex<0){ app.echoToOE("__ERR__copy_failed"); return; }',
-    ' // Duplicate the WHOLE document to a temporary one (safe, does not touch user doc)',
-    ' var tmp = d.duplicate();',
-    ' try { app.activeDocument = tmp; } catch(e){}',
-    ' // Re-index in temp and pick the same preorder index',
-    ' function walk2(L, out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk2(ly.layers, out); } }',
-    ' var all2 = []; walk2(tmp.layers, all2);',
-    ' if (targetIndex>=all2.length){ app.echoToOE("__ERR__copy_failed"); try{ tmp.close(); }catch(e){} try{ app.activeDocument=d; }catch(e){} return; }',
-    ' var tgt = all2[targetIndex];',
-    ' // Turn everything OFF in temp',
-    ' for (var i=0;i<all2.length;i++){ try{ all2[i].visible = false; }catch(_e){} }',
-    ' // Turn target and its parents ON',
-    ' try {',
-    '   tgt.visible = true;',
-    '   var p = tgt.parent;',
-    '   while(p){ try{ p.visible = true; }catch(__){} p = p.parent; }',
-    ' } catch(e) {}',
-    ' // Export and close temp',
-    ' try { tmp.saveToOE("png"); } catch(e) { app.echoToOE("__ERR__copy_failed"); }',
-    ' try { tmp.close(); } catch(e) {}',
-    ' try { app.activeDocument = d; } catch(e) {}',
+    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+    ' var all=[]; walk(d.layers, all);',
+    ' var prev=new Array(all.length); for (var i=0;i<all.length;i++){ prev[i]=!!all[i].visible; }',
+    ' // Turn all OFF',
+    ' for (var i=0;i<all.length;i++){ try{ all[i].visible=false; }catch(e){} }',
+    ' // Turn current layer and its parents ON',
+    ' var cl=d.currentLayer;',
+    ' if (cl){',
+    '   try{ cl.visible=true; }catch(e){}',
+    '   try{ var p=cl.parent; while(p){ try{ p.visible=true; }catch(e){} p=p.parent; } }catch(e){}',
+    ' }',
+    ' d.saveToOE("png");',
+    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
     '})();'
   ].join('\n');
 }
 
-/** FULL DOCUMENT (safe):
- *  1) Duplicate the whole document to a temp doc.
- *  2) Turn ALL layers ON in temp.
- *  3) saveToOE("png"), close temp, return to original.
- *  User doc is never touched.
- */
-function buildScript_FullDoc_viaTempDoc(){
+/** FULL DOCUMENT (solo-visibility in original doc) */
+function scriptFullDocumentSolo(){
   return [
     '(function(){',
-    ' var d = app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
-    ' function walk(L, out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers, out); } }',
-    ' // Duplicate the whole document',
-    ' var tmp = d.duplicate();',
-    ' try { app.activeDocument = tmp; } catch(e){}',
-    ' var all = []; walk(tmp.layers, all);',
-    ' // Force all visible in temp',
-    ' for (var i=0;i<all.length;i++){ try{ all[i].visible = true; }catch(_e){} }',
-    ' try { tmp.saveToOE("png"); } catch(e) {}',
-    ' try { tmp.close(); } catch(e) {}',
-    ' try { app.activeDocument = d; } catch(e) {}',
+    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+    ' var all=[]; walk(d.layers, all);',
+    ' var prev=new Array(all.length); for (var i=0;i<all.length;i++){ prev[i]=!!all[i].visible; }',
+    ' for (var i=0;i<all.length;i++){ try{ all[i].visible=true; }catch(e){} }',
+    ' d.saveToOE("png");',
+    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
     '})();'
   ].join('\n');
 }
 
-/* ===== Preview & diagnostics ===== */
+/** Restore visibility exactly to the snapshot we got from Photopea */
+function restoreVisibility(prevJson){
+  const restore = [
+    '(function(){',
+    ' var d=app.activeDocument; if(!d) return;',
+    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
+    ' var all=[]; walk(d.layers, all);',
+    ' var prev='+prevJson+';',
+    ' for (var i=0;i<all.length && i<prev.length;i++){ try{ all[i].visible = !!prev[i]; }catch(e){} }',
+    '})();'
+  ].join('\n');
+  try{ window.parent.postMessage(restore,"*"); }catch(e){}
+}
+
+/* ================= Preview & diagnostics ================= */
 function drawPreview(img, mode){
   document.getElementById("pvMeta").textContent =
     `Source: ${mode==="layer"?"Current layer":"Full document"} • ${img.width}×${img.height}px`;
@@ -245,7 +240,7 @@ function diagnose(pix){
   return {count:n, avgY:n?sumY/n:0, blackRate:n?blacks/n:1};
 }
 
-/* ===== Palettes ===== */
+/* ================= Palettes ================= */
 const lastPalettes={freq:[],bright:[],chroma:[],hue:[]};
 function runAllPalettes(data,w,h){
   const kRaw = parseInt(document.getElementById("k").value||"6",10);
@@ -263,7 +258,7 @@ function render(key, colors){
   const hx=document.querySelector(`.hex[data-hex="${key}"]`); if(hx) hx.textContent = colors.map(hex).join('  ');
 }
 
-/* ===== Color / math ===== */
+/* ================= Color / math ================= */
 function hex([r,g,b]){ const h=n=>Math.max(0,Math.min(255,n|0)).toString(16).padStart(2,'0').toUpperCase(); return `#${h(r)}${h(g)}${h(b)}`; }
 function rgbaToRgbArray(rgba, alphaMin=1){ const out=[]; for(let i=0;i<rgba.length;i+=4){ if(rgba[i+3] < alphaMin) continue; out.push([rgba[i],rgba[i+1],rgba[i+2]]);} return out; }
 function rgbToHsl([r,g,b]){ r/=255; g/=255; b/=255; const max=Math.max(r,g,b), min=Math.min(r,g,b); let h=0,s=0,l=(max+min)/2; if(max!==min){ const d=max-min; s=l>0.5? d/(2-max-min): d/(max+min); switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;} h/=6;} return [h*360,s,l]; }
@@ -271,7 +266,7 @@ function dist2(a,b){ const dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; return dx*dx+
 function avg(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n),Math.round(g/n),Math.round(b/n)]; }
 function sample(arr,n){ if(arr.length<=n) return arr; const out=[],step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
 
-/* K-means & friends */
+/* ================= K-means & palette helpers ================= */
 function kmeans(pixels,k){
   const S=sample(pixels, Math.min(40000,pixels.length)); if(!S.length) return Array.from({length:k},()=>[0,0,0]);
   const centers=[], used=new Set(); while(centers.length<Math.min(k,S.length)){ const i=Math.floor(Math.random()*S.length); if(!used.has(i)){ used.add(i); centers.push(S[i].slice()); } }
@@ -308,10 +303,27 @@ function fairBuckets(arr,k){
   return out;
 }
 
-/* ===== Canvas / export ===== */
+/* ================= Canvas / export helpers ================= */
 function blobToImage(blob){ return new Promise(res=>{ const img=new Image(); img.onload=()=>res(img); img.src=URL.createObjectURL(blob); }); }
-function imageToImageData(img, maxLong=768){ const long=Math.max(img.width,img.height), s=long>maxLong? maxLong/long:1; const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s)); const cv=document.createElement("canvas"); cv.width=w; cv.height=h; const cx=cv.getContext("2d",{willReadFrequently:true}); cx.drawImage(img,0,0,w,h); const id=cx.getImageData(0,0,w,h); return {data:id.data,width:w,height:h}; }
-async function exportPalette(colors, filename){ const sw=100,H=100,W=Math.max(1,colors.length*sw); const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const cx=cv.getContext("2d"); let x=0; for(const c of colors){ cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; cx.fillRect(x,0,sw,H); x+=sw; } const blob=await new Promise(res=>cv.toBlob(res,"image/png")); const ab=await blob.arrayBuffer(); try{ window.parent.postMessage(ab,"*"); }catch(e){} setTimeout(()=>{ try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){} },300); }
+function imageToImageData(img, maxLong=768){
+  const long=Math.max(img.width,img.height), s=long>maxLong? maxLong/long:1;
+  const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s));
+  const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+  const cx=cv.getContext("2d",{willReadFrequently:true}); // faster getImageData
+  cx.drawImage(img,0,0,w,h);
+  const id=cx.getImageData(0,0,w,h);
+  return {data:id.data,width:w,height:h};
+}
+async function exportPalette(colors, filename){
+  const sw=100,H=100,W=Math.max(1,colors.length*sw);
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const cx=cv.getContext("2d");
+  let x=0; for(const c of colors){ cx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; cx.fillRect(x,0,sw,H); x+=sw; }
+  const blob=await new Promise(res=>cv.toBlob(res,"image/png"));
+  const ab=await blob.arrayBuffer();
+  try{ window.parent.postMessage(ab,"*"); }catch(e){}
+  setTimeout(()=>{ try{ window.parent.postMessage(`if(app.activeDocument) app.activeDocument.name="${filename.replace(/"/g,'')}"`,"*"); }catch(e){} },300);
+}
 </script>
 </body>
 </html>
