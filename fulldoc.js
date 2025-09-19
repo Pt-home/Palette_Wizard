@@ -146,9 +146,11 @@ function render(key, colors) {
       </div>
     `;
   }).join('');
+
   const hx = document.querySelector(`.hex[data-hex="${key}"]`);
   if (hx) hx.textContent = "";
 }
+
 
 
 /* ---------- Color / math ---------- */
