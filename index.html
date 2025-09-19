@@ -24,8 +24,11 @@
     section.palette{ border:1px solid #2a2e35; border-radius:10px; padding:12px; }
     .titlebar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
     .titlebar h2{ font-size:14px; margin:0; }
-    .swatches{ display:flex; gap:var(--gap); flex-wrap:wrap; }
+    .swatches{ display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; }
+    .chip{ display:flex; flex-direction:column; align-items:center; width:var(--sw); }
     .sw{ width:var(--sw); height:var(--sw); border-radius:8px; border:1px solid #1e2228; }
+    .code{ margin-top:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#9aa1ab; text-align:center; width:100%; }
+
     .hex{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#9aa1ab; }
     .row2{ display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
     footer{ padding:10px 16px; border-top:1px solid #2a2e35; font-size:12px; color:#9aa1ab; }
@@ -76,3 +79,4 @@
   <script src="fulldoc.js"></script>
 </body>
 </html>
+
