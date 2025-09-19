@@ -5,7 +5,12 @@
   <title>Palette Wizard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root { --gap:10px; --sw:40px; }
+    :root{
+  --sw: 44px;          /* swatch width/height */
+  --gap: 14px;         /* gap between columns */
+  --rowgap: 18px;      /* gap between rows (chip→chip) */
+  --vspace: 6px;       /* gap between swatch and its HEX */
+    }
     *{ box-sizing:border-box; }
     body{ font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin:0; color:#e8e8e8; background:#0f1115; }
     header{ padding:14px 16px; border-bottom:1px solid #2a2e35; position:sticky; top:0; z-index:10; background:#0f1115; }
@@ -24,10 +29,37 @@
     section.palette{ border:1px solid #2a2e35; border-radius:10px; padding:12px; }
     .titlebar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
     .titlebar h2{ font-size:14px; margin:0; }
-    .swatches{ display:flex; gap:var(--gap); flex-wrap:wrap; align-items:flex-start; }
-    .chip{ display:flex; flex-direction:column; align-items:center; width:var(--sw); }
-    .sw{ width:var(--sw); height:var(--sw); border-radius:8px; border:1px solid #1e2228; }
-    .code{ margin-top:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#9aa1ab; text-align:center; width:100%; }
+    
+    .swatches{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, var(--sw));
+      column-gap: var(--gap);
+      row-gap: var(--rowgap);
+      align-content: start;
+      justify-content: start;
+    }
+    .chip{
+      width: var(--sw);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .sw{
+      width: 100%;
+      height: var(--sw);
+      border-radius: 8px;
+      border: 1px solid #1e2228;
+    }
+
+    .code{
+      width: 100%;
+      margin-top: var(--vspace);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.2;
+      color: #9aa1ab;
+      text-align: center;
+    }
 
     .hex{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; color:#9aa1ab; }
     .row2{ display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
@@ -79,6 +111,7 @@
   <script src="fulldoc.js"></script>
 </body>
 </html>
+
 
 
 
