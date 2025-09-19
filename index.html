@@ -80,10 +80,47 @@
   <footer>Transparent pixels are ignored in analysis.</footer>
 
 <script>
-/* ================= Bridge with Photopea ================= */
+/* ================= Bridge with Photopea (single handler, no conflicts) ================= */
 let ppReady=false, waiter=null;
-window.addEventListener("message", e => { if(e.data==="done"){ ppReady=true; if(waiter){waiter(); waiter=null;} }});
-try{ window.parent.postMessage("app.echoToOE('ping')","*"); }catch(e){}
+let awaitingPNG = false;   // true only while we wait for the next PNG
+let currentMode = "doc";   // "doc" | "layer"
+
+window.addEventListener("message", async (e) => {
+  // Handle Photopea PNG or short string error messages
+  if (e.data instanceof ArrayBuffer) {
+    if (!awaitingPNG) return; // ignore stale data
+    try {
+      const img = await blobToImage(new Blob([e.data], {type:"image/png"}));
+      drawPreview(img, currentMode);
+      const {data,width,height} = imageToImageData(img, 768);
+      const pixels = rgbaToRgbArray(data, 1); // ignore fully transparent pixels
+
+      const diag = diagnose(pixels);
+      document.getElementById("pvDiag").innerHTML =
+        `<div>Non-transparent pixels: <b>${diag.count}</b></div>
+         <div>Avg luminance: <b>${diag.avgY.toFixed(1)}</b></div>
+         <div>Black ratio (&le;10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
+
+      if (diag.count >= 10) {
+        runAllPalettes(data,width,height);
+        setExport(true);
+      } else {
+        console.warn("PNG contained too few non-transparent pixels.");
+      }
+    } finally {
+      awaitingPNG = false;
+    }
+  } else if (typeof e.data === "string") {
+    if (e.data.startsWith("__ERR__")) {
+      console.error(e.data);
+      awaitingPNG = false;
+    } else if (e.data === "done") {
+      ppReady = true; if (waiter){ waiter(); waiter=null; }
+    }
+  }
+});
+
+try { window.parent.postMessage("app.echoToOE('ping')","*"); } catch(e) {}
 function waitPP(){ return new Promise(r=>{ if(ppReady) r(); else waiter=r; }); }
 
 /* ================= UI ================= */
@@ -92,9 +129,13 @@ document.getElementById("gen").addEventListener("click", async () => {
   await waitPP();
   setExport(false); clearPalettes();
 
-  const mode = document.getElementById("src").value; // "doc" | "layer"
-  const ok = await requestPng(mode);
-  if (!ok) console.warn("No pixels captured (transparent/empty).");
+  currentMode = document.getElementById("src").value; // "doc" | "layer"
+  awaitingPNG = true;
+
+  const script = (currentMode==="layer") ? scriptCurrentLayerSolo()
+                                         : scriptFullDocumentSolo();
+  try { window.parent.postMessage(script,"*"); }
+  catch (e) { console.error("Failed to send script to Photopea:", e); awaitingPNG=false; }
 });
 
 document.querySelectorAll('button[data-export]').forEach(btn=>{
@@ -103,6 +144,7 @@ document.querySelectorAll('button[data-export]').forEach(btn=>{
     exportPalette(lastPalettes[key]||[], `Palette-${key.toUpperCase()}.png`);
   });
 });
+
 function setExport(v){ document.querySelectorAll('button[data-export]').forEach(b=>b.disabled=!v); }
 function clearPalettes(){
   for(const key of ["freq","bright","chroma","hue"]){
@@ -111,114 +153,50 @@ function clearPalettes(){
   }
 }
 
-/* ================= Core export flow ================= */
-/** We export PNG and (when needed) a visibility snapshot. We restore vis after both are received. */
-async function requestPng(mode){
-  let gotPNG=false, visJSON=null;
-
-  const onMsg = async (e)=>{
-    if (e.data instanceof ArrayBuffer) {
-      // Got PNG
-      const img = await blobToImage(new Blob([e.data], {type:"image/png"}));
-      drawPreview(img, mode);
-      const {data,width,height} = imageToImageData(img, 768);
-      const pixels = rgbaToRgbArray(data, 1);
-
-      const diag = diagnose(pixels);
-      document.getElementById("pvDiag").innerHTML =
-        `<div>Non-transparent pixels: <b>${diag.count}</b></div>
-         <div>Avg luminance: <b>${diag.avgY.toFixed(1)}</b></div>
-         <div>Black ratio (&le;10): <b>${(diag.blackRate*100).toFixed(1)}%</b></div>`;
-
-      if (diag.count>=10){
-        runAllPalettes(data,width,height);
-        setExport(true);
-      }
-      gotPNG = true;
-      if (visJSON!==null) restoreVisibility(visJSON);
-    } else if (typeof e.data === "string" && e.data.startsWith("__VIS__")) {
-      visJSON = e.data.substring(7);
-      if (gotPNG) restoreVisibility(visJSON);
-    }
-  };
-  window.addEventListener("message", onMsg);
-
-  const script = (mode==="layer") ? scriptCurrentLayerSolo()
-                                  : scriptFullDocumentSolo();
-
-  try{ window.parent.postMessage(script,"*"); }catch(e){ return false; }
-
-  // Wait until PNG (and for Full Doc / Current Layer we also expect __VIS__)
-  const ok = await new Promise(resolve=>{
-    const t = setTimeout(()=>{ window.removeEventListener("message", onMsg); resolve(false); }, 5000);
-    const chk = setInterval(()=>{
-      if (gotPNG && visJSON!==null){
-        clearTimeout(t); clearInterval(chk);
-        window.removeEventListener("message", onMsg);
-        resolve(true);
-      }
-    }, 50);
-  });
-  return ok;
-}
-
-/* ================= Photopea scripts (strings with real \n) ================= */
-/** CURRENT LAYER (solo-visibility in original doc; fast and reliable)
- *  1) Flatten list of all layers (preorder).
- *  2) Save their visibility.
- *  3) Turn ALL off.
- *  4) Turn currentLayer ON + all its parents ON.
- *  5) saveToOE("png").
- *  6) Send back the visibility snapshot to restore afterwards.
+/* ================= Photopea scripts: inline restore (no second round-trip) ================= */
+/** CURRENT LAYER (in-place solo export with inline restore)
+ *  1) Collect all layers in preorder.
+ *  2) Save visibility snapshot.
+ *  3) Hide ALL layers.
+ *  4) Show only current layer and its parent groups.
+ *  5) saveToOE("png")
+ *  6) Restore visibility snapshot immediately (still inside this single script).
  */
 function scriptCurrentLayerSolo(){
   return [
     '(function(){',
-    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' var d=app.activeDocument; if(!d){ app.echoToOE("__ERR__no_document"); return; }',
+    ' var cl=d.currentLayer; if(!cl){ app.echoToOE("__ERR__no_current_layer"); return; }',
     ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
     ' var all=[]; walk(d.layers, all);',
-    ' var prev=new Array(all.length); for (var i=0;i<all.length;i++){ prev[i]=!!all[i].visible; }',
-    ' // Turn all OFF',
+    ' // Save current visibility',
+    ' var prev=new Array(all.length); for (var i=0;i<all.length;i++){ try{ prev[i]=!!all[i].visible; }catch(e){ prev[i]=true; } }',
+    ' // Hide everything',
     ' for (var i=0;i<all.length;i++){ try{ all[i].visible=false; }catch(e){} }',
-    ' // Turn current layer and its parents ON',
-    ' var cl=d.currentLayer;',
-    ' if (cl){',
-    '   try{ cl.visible=true; }catch(e){}',
-    '   try{ var p=cl.parent; while(p){ try{ p.visible=true; }catch(e){} p=p.parent; } }catch(e){}',
-    ' }',
-    ' d.saveToOE("png");',
-    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
+    ' // Ensure current layer and all its parents are visible',
+    ' try{ cl.visible=true; }catch(e){}',
+    ' try{ var p=cl.parent; while(p){ try{ p.visible=true; }catch(_e){} p=p.parent; } }catch(e){}',
+    ' // Export',
+    ' try{ d.saveToOE("png"); }catch(e){ app.echoToOE("__ERR__save_failed"); }',
+    ' // Restore visibility immediately',
+    ' for (var i=0;i<all.length;i++){ try{ all[i].visible=!!prev[i]; }catch(e){} }',
     '})();'
   ].join('\n');
 }
 
-/** FULL DOCUMENT (solo-visibility in original doc) */
+/** FULL DOCUMENT (inline restore) */
 function scriptFullDocumentSolo(){
   return [
     '(function(){',
-    ' var d=app.activeDocument; if(!d){ app.echoToOE("No document"); return; }',
+    ' var d=app.activeDocument; if(!d){ app.echoToOE("__ERR__no_document"); return; }',
     ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
     ' var all=[]; walk(d.layers, all);',
-    ' var prev=new Array(all.length); for (var i=0;i<all.length;i++){ prev[i]=!!all[i].visible; }',
+    ' var prev=new Array(all.length); for (var i=0;i<all.length;i++){ try{ prev[i]=!!all[i].visible; }catch(e){ prev[i]=true; } }',
     ' for (var i=0;i<all.length;i++){ try{ all[i].visible=true; }catch(e){} }',
-    ' d.saveToOE("png");',
-    ' app.echoToOE("__VIS__"+JSON.stringify(prev));',
+    ' try{ d.saveToOE("png"); }catch(e){ app.echoToOE("__ERR__save_failed"); }',
+    ' for (var i=0;i<all.length;i++){ try{ all[i].visible=!!prev[i]; }catch(e){} }',
     '})();'
   ].join('\n');
-}
-
-/** Restore visibility exactly to the snapshot we got from Photopea */
-function restoreVisibility(prevJson){
-  const restore = [
-    '(function(){',
-    ' var d=app.activeDocument; if(!d) return;',
-    ' function walk(L,out){ for(var i=0;i<L.length;i++){ var ly=L[i]; out.push(ly); if(ly.layers && ly.layers.length) walk(ly.layers,out); } }',
-    ' var all=[]; walk(d.layers, all);',
-    ' var prev='+prevJson+';',
-    ' for (var i=0;i<all.length && i<prev.length;i++){ try{ all[i].visible = !!prev[i]; }catch(e){} }',
-    '})();'
-  ].join('\n');
-  try{ window.parent.postMessage(restore,"*"); }catch(e){}
 }
 
 /* ================= Preview & diagnostics ================= */
@@ -266,7 +244,7 @@ function dist2(a,b){ const dx=a[0]-b[0],dy=a[1]-b[1],dz=a[2]-b[2]; return dx*dx+
 function avg(list){ if(!list.length) return [0,0,0]; let r=0,g=0,b=0; for(const p of list){ r+=p[0]; g+=p[1]; b+=p[2]; } const n=list.length; return [Math.round(r/n),Math.round(g/n),Math.round(b/n)]; }
 function sample(arr,n){ if(arr.length<=n) return arr; const out=[],step=arr.length/n; for(let i=0;i<n;i++) out.push(arr[Math.floor(i*step)]); return out; }
 
-/* ================= K-means & palette helpers ================= */
+/* ================= K-means & helpers ================= */
 function kmeans(pixels,k){
   const S=sample(pixels, Math.min(40000,pixels.length)); if(!S.length) return Array.from({length:k},()=>[0,0,0]);
   const centers=[], used=new Set(); while(centers.length<Math.min(k,S.length)){ const i=Math.floor(Math.random()*S.length); if(!used.has(i)){ used.add(i); centers.push(S[i].slice()); } }
@@ -309,7 +287,7 @@ function imageToImageData(img, maxLong=768){
   const long=Math.max(img.width,img.height), s=long>maxLong? maxLong/long:1;
   const w=Math.max(1,Math.round(img.width*s)), h=Math.max(1,Math.round(img.height*s));
   const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
-  const cx=cv.getContext("2d",{willReadFrequently:true}); // faster getImageData
+  const cx=cv.getContext("2d",{willReadFrequently:true});
   cx.drawImage(img,0,0,w,h);
   const id=cx.getImageData(0,0,w,h);
   return {data:id.data,width:w,height:h};
